@@ -1,0 +1,26 @@
+[tool.poetry]
+name = "discord-ta-bot"
+version = "0.1.0"
+packages = [{ include = "discord-ta-bot" }]
+description = "Discord bot for TA life. Role-assignment, canvas and github intergration"
+authors = ["nohr-ai <oyvind.a.nohr@uit.no>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+discord = "^2.3.2"
+asyncio = "^3.4.3"
+python-dotenv = "^1.0.0"
+pymongo = "^4.6.0"
+canvasapi = "^3.2.0"
+
+
+[tool.poetry.group.dev.dependencies]
+sphinx = "^7.2.6"
+sphinx-autoapi = "^3.0.0"
+sphinx-rtd-theme = "^2.0.0"
+myst-nb = "^1.0.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
