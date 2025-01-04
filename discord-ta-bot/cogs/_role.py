@@ -1,6 +1,7 @@
 import os
 import discord
 import asyncio
+from objects.guild import Guild
 from discord import app_commands
 from discord.ext import commands
 from discord.app_commands.checks import has_permissions
@@ -188,7 +189,6 @@ class Role(commands.Cog):
         role, member = await self.get_reaction_role_member(payload)
         self.bot.log.info(f"Removing role {role.name} from {member.name}")
         await member.remove_roles(role)
-
 
 async def setup(bot):
     await bot.add_cog(Role(bot))
