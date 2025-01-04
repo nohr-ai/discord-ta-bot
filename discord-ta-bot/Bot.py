@@ -6,6 +6,7 @@ from pymongo import MongoClient
 from typing import Optional
 from objects.canvas_course import Course
 from objects import Guild
+from objects.group import Group
 import discord
 from dotenv import load_dotenv, find_dotenv
 from discord.ext import commands
@@ -24,10 +25,14 @@ class Bot(commands.Bot):
     - LOGFILE_SIZE
     - LOGFILE_COUNT
 
+    Optional environment variables:
+    - CANVAS_TOKEN
+    - GITHUB_PA_TOKEN
+
     It requires the following discord intents
     - all
 
-    Specific functionality is implemented in the cogs.
+    Specific functionality is implemented in the cogs found under /cogs
 
     """
 
@@ -35,7 +40,7 @@ class Bot(commands.Bot):
         intents = discord.Intents.all()
         super().__init__(command_prefix="!", intents=intents)
         self.handlers = [
-            f"cogs.{handler[:-3]}"
+            f"cogs.{handler.removesuffix('.py')}"
             for handler in os.listdir("cogs")
             if handler.endswith(".py") and not handler.startswith("_")
         ]
@@ -43,7 +48,7 @@ class Bot(commands.Bot):
             os.getenv("DATABASE_NAME")
         ]
         self._guilds: dict[int, Guild] = {}
-        self.log = None
+        self.log = self.setup_logging()
 
     def setup_logging(self) -> None:
         """
@@ -70,11 +75,12 @@ class Bot(commands.Bot):
         debug_handler.setFormatter(formatter)
         debug_handler.setLevel(logging.DEBUG)
 
-        self.log = logging.getLogger()
-        self.log.setLevel(logging.DEBUG)
-        self.log.propagate = False
-        self.log.addHandler(normal_handler)
-        self.log.addHandler(debug_handler)
+        logger = logging.getLogger()
+        logger.setLevel(logging.DEBUG)
+        logger.propagate = False
+        logger.addHandler(normal_handler)
+        logger.addHandler(debug_handler)
+        return logger
 
     def get_member(self, id) -> discord.member.Member:
         """
@@ -108,13 +114,13 @@ class Bot(commands.Bot):
         for handler in self.handlers:
             await self.load_extension(handler)
 
-        await self.tree.sync()
+        await self.tree.sync(guild=discord.utils.get(self.guilds, id=875845075068944424))
 
     async def on_ready(self) -> None:
         """
         After backend is up and running, setup frontend and load all guilds
         """
-        self.setup_logging()
+
         for g in self.db.get_collection("Guilds").find():
             self._guilds[g["_id"]] = Guild(**g)
         for guild in self.guilds:
@@ -162,7 +168,7 @@ class Bot(commands.Bot):
         if guild:
             return Guild(**guild)
         else:
-            return None
+            raise ValueError(f"Guild: {guild_id} not found!")
 
     async def add_canvas_course(self, guild_id: int, course: Course) -> None:
         """
@@ -189,12 +195,54 @@ class Bot(commands.Bot):
             guilds = self.db.get_collection("Guilds")
             guilds.update_one({"_id": guild_id}, {"$set": guild.to_json()}, upsert=True)
 
-    async def add_roles(
+    async def  set_role_message(
+            self,
+            guild: discord.Guild,
+            message: discord.Message=None
+    ) -> None:
+        '''
+        Add message ID for role reactions to the db
+        This overwrite any existing message used for role tracking
+        
+        Parameters
+        ----------
+        guild : discord.Guild
+            The guild requesting a new setup
+        message : discord.Message
+            The message for tracking reactions
+        
+        Returns
+        -------
+        bool
+            True if successful, False otherwise
+        '''
+
+        guild = await self.get_guild(guild.id)
+        if not guild:
+            raise ValueError(f"Guild: {guild.id} not found!")
+        db = self.db.get_collection("Guilds")
+        db.update_one(
+            {"_id": guild.id},
+            {"$set": {"role_message":message.id if message else None}},
+            upsert=True,
+        )
+
+    async def get_role_message(
         self,
         guild: discord.Guild,
-        message: discord.Message,
+    ) -> int:
+        guild = await self.get_guild(guild.id)
+        if not guild:
+            raise ValueError(f"Guild: {guild.id} not found!")
+        db = self.db.get_collection("Guilds")
+        guild = db.find_one({"_id":guild.id})
+        return int(guild['role_message'])
+
+    async def set_roles(
+        self,
+        guild: discord.Guild,
         emojis_roles: dict[discord.Emoji, discord.Role],
-    ) -> bool:
+    ) -> None:
         """
         Add roles to the database
         This overwrites any existing roles for a guild
@@ -213,20 +261,54 @@ class Bot(commands.Bot):
         """
         guild = await self.get_guild(guild.id)
         if not guild:
-            return False
-        # Insert emoji-role dict into database
+            raise ValueError(f"Guild {guild.id} not found!")
+
         db = self.db.get_collection("Guilds")
-        db.update_one(
-            {"_id": guild.id},
-            {"$set": {"role_message": message.id}},
-            upsert=True,
-        )
         db.update_one(
             {"_id": guild.id},
             {"$set": {"roles": {str(k): v.id for k, v in emojis_roles.items()}}},
             upsert=True,
         )
-        return True
+
+    async def set_groups(
+        self,
+        guild: discord.Guild,
+        groups: list[Group] = None
+    ) -> None:
+        '''
+        Add groups to a guild in the db
+
+        Overwrites any previously set groups.
+        '''
+        guild = await self.get_guild(guild.id)
+        if not guild:
+            raise ValueError(f"Guild {guild.id} not found!")
+        
+        db = self.db.get_collection("Guilds")
+        db.update_one(
+            {"_id": guild.id},
+            {"$set": 
+                {"groups": [group.to_json() for group in groups]} if groups else []},
+            upsert=True,
+        )
+    
+    async def get_guild_roles(self, guild:discord.Guild) -> dict[discord.Emoji, discord.Role]:
+        '''
+        Get roles for one guild from the database
+        
+        Parameters
+        ----------
+        guild : discord.Guild
+            The guild to search for
+        
+        Returns
+        -------
+        roles : dict[discord.Emoji, discord.Role]
+            Dict with key-val mapping of linked emojis and roles.
+        '''
+        db = self.db.get_collection("Guilds")
+        guild = Guild(**db.find_one({"_id":guild.id}))
+        return guild.roles
 
     async def get_all_roles(self) -> dict[dict[discord.Emoji, discord.Role]]:
         """
@@ -238,8 +320,12 @@ class Bot(commands.Bot):
             Dictionary of emoji-role dictionaries
         """
         db = self.db.get_collection("Guilds")
-        return {g["_id"]: g["emojis_roles"] for g in db.find()}
+        return {g["_id"]: g["roles"] for g in db.find()}
 
+    async def get_groups(self, guild: discord.Guild) -> list[Group]:
+        db = self.db.get_collection("Guilds")
+        guild = db.find_one({"_id": guild.id})
+        return Guild(**guild).groups
 
 if __name__ == "__main__":
     load_dotenv(find_dotenv(".env"))
