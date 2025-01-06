@@ -26,6 +26,21 @@ class Admin(commands.Cog):
             await interaction.response.send_message(f"Loaded {module}.", ephemeral=True)
 
     @app_commands.command(
+        name="delete_groups",
+        description="Delete groups with a prefix",
+    )
+    @has_permissions(administrator=True)
+    async def delete_gruops(self, interaction:discord.Interaction, prefix: str)-> None:
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        guild = interaction.guild
+
+        for role in guild.roles:
+            if role.name.startswith(prefix):
+                await role.delete()
+
+        await interaction.followup.send("Done", ephemeral=True)
+
+    @app_commands.command(
         name="unload",
         description="Unload a module.",
     )
@@ -101,8 +116,10 @@ class Admin(commands.Cog):
         Syncs commands with the discord API.
         Will make breaking changes to your bot visible to users.
         """
-        await self.bot.tree.sync()
-        await interaction.response.send_message("Commands synced.", ephemeral=True)
+        await interaction.response.defer(ephemeral=True, thinking=True)
+
+        await self.bot.sync_commands()
+        await interaction.followup.send("Commands synced.", ephemeral=True)
 
     @app_commands.command(
         name="timer",

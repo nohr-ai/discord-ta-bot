@@ -114,7 +114,10 @@ class Bot(commands.Bot):
         for handler in self.handlers:
             await self.load_extension(handler)
 
-        await self.tree.sync(guild=discord.utils.get(self.guilds, id=875845075068944424))
+        await self.tree.sync()
+
+    async def sync_commands(self)->None:
+        await self.tree.sync()
 
     async def on_ready(self) -> None:
         """
