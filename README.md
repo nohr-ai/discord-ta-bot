@@ -69,3 +69,12 @@ The bot is by defautl setup with rotating filehandlers for logging. You can modi
 - `LOGFILE_FORMAT`: Format of the log output. Default: log-level name time log-message
 
 
+# Running the bot
+After setting up the environment and DB instance you can hopefully run the bot with:
+```
+python Bot.py
+```
+Alternatively
+```
+poetry run python Bot.py
+```
