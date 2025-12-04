@@ -39,9 +39,10 @@ class Bot(commands.Bot):
     def __init__(self):
         intents = discord.Intents.all()
         super().__init__(command_prefix="!", intents=intents)
+        print(os.path.dirname(os.path.realpath(__file__)))
         self.handlers = [
             f"cogs.{handler.removesuffix('.py')}"
-            for handler in os.listdir("cogs")
+            for handler in os.listdir(os.path.dirname(os.path.realpath(__file__))+("/cogs"))
             if handler.endswith(".py") and not handler.startswith("_")
         ]
         self.db: Database = MongoClient(os.getenv("DATABASE_URI"))[
