@@ -10,7 +10,7 @@ from objects.group import Group
 import discord
 from dotenv import load_dotenv, find_dotenv
 from discord.ext import commands
-from discord import app_commands
+from discord import app_commands, TextChannel, VoiceChannel
 
 
 class Bot(commands.Bot):
@@ -330,6 +330,23 @@ class Bot(commands.Bot):
         db = self.db.get_collection("Guilds")
         guild = db.find_one({"_id": guild.id})
         return Guild(**guild).groups
+
+    async def get_persistent_text_channels(self, guild: discord.Guild) -> list[TextChannel]:
+        db = self.db.get_collection("Guilds")
+        _guild = Guild(**db.find_one({"_id":guild.id}))
+        return _guild.persistent_text_channels
+
+    async def set_persistent_text_channels(self, guild:discord.Guild, persistent_text_channels:list[int]=[])->list[TextChannel]:
+        guild = self.get_guild(guild.id)
+        if not guild:
+            raise ValueError(f"Guild: {guild.id} not found")
+        db = self.db.get_collection("Guilds")
+        db.update_one(
+            {"_id": guild.id},
+            {"$set":{"persistent_text_channels":persistent_text_channels}},
+            upsert=True,
+        )
+
 
 if __name__ == "__main__":
     load_dotenv(find_dotenv(".env"))
