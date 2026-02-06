@@ -5,6 +5,7 @@ import json
 import random
 import time
 from Bot import Bot
+import logging
 from datetime import datetime, timezone
 from objects.group import Group
 from objects.guild import Guild
@@ -12,7 +13,12 @@ from discord import app_commands, PermissionOverwrite
 from discord.ext import commands
 from discord.app_commands.checks import has_permissions
 
-EMOJIS:dict = json.load(open("../assets/emojis.json", "r"))
+# Yikes, TODO: Cleanup
+fpath = os.path.dirname(os.path.realpath(__file__))
+emojipath = os.path.join(fpath,"..","..","assets","emojis.json")
+EMOJIS:dict = {}
+with open(emojipath,"r") as emojis:
+    EMOJIS = json.load(emojis)
 
 class Role(commands.Cog):
     """
@@ -27,6 +33,7 @@ class Role(commands.Cog):
 
     def __init__(self, bot):
         self.bot:Bot = bot
+        self.logger:logging.Logger = logging.getLogger(__name__)
 
     @app_commands.command(
         name="start_semester",
@@ -90,7 +97,7 @@ class Role(commands.Cog):
             await self.bot.set_role_message(guild, message)
             await interaction.followup.send("Setup complete")
         except Exception as e:
-            self.bot.log.exception(e)
+            self.logger.exception(e)
             for group in groups:
                 role = guild.get_role(group.role_id)
                 try:
@@ -103,7 +110,7 @@ class Role(commands.Cog):
                     await text_channels.delete()
                     await voice_channels.delete()
                 except Exception as ee:
-                    self.bot.log.exception(ee)
+                    self.logger.exception(ee)
             await interaction.followup.send(f"Setup abort: {e}")
 
     @app_commands.command(
@@ -162,7 +169,7 @@ class Role(commands.Cog):
                 if group.emoji == emoji.name:
                     return discord.utils.get(guild.roles, name=group.name)
         except ValueError as ve:
-            self.bot.log.exception(ve)
+            self.logger.exception(ve)
 
 
 
@@ -180,14 +187,14 @@ class Role(commands.Cog):
             return
         internal_guild = await self.bot.get_guild(payload.guild_id)
         if not internal_guild.role_message or payload.message_id != internal_guild.role_message:
-            self.bot.log.debug(f"Message {payload.message_id} not role message")
+            self.logger.debug(f"Message {payload.message_id} not role message")
             return
         discord_guild = discord.utils.get(self.bot.guilds, id=payload.guild_id)
         member = discord_guild.get_member(payload.user_id)
         if discord.utils.get(member.roles, name="Alumni"):
             return
         role = await self.get_reaction_role(discord_guild, payload.emoji)
-        self.bot.log.info(f"Adding role {role.name} to {member.name}")
+        self.logger.info(f"Adding role {role.name} to {member.name}")
         await member.add_roles(role)
 
     @commands.Cog.listener()
@@ -204,14 +211,14 @@ class Role(commands.Cog):
             return
         guild = await self.bot.get_guild(payload.guild_id)
         if not guild.role_message or payload.message_id != guild.role_message:
-            self.bot.log.debug(f"Message {payload.message_id} not found")
+            self.logger.debug(f"Message {payload.message_id} not found")
             return
         discord_guild = discord.utils.get(self.bot.guilds, id=payload.guild_id)
         member = discord_guild.get_member(payload.user_id)
         if discord.utils.get(member.roles, name="Alumni"):
             return
         role = await self.get_reaction_role(discord_guild, payload.emoji)
-        self.bot.log.info(f"Removing role {role.name} from {member.name}")
+        self.logger.info(f"Removing role {role.name} from {member.name}")
         await member.remove_roles(role)
 
 async def setup(bot):

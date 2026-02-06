@@ -39,10 +39,11 @@ class Bot(commands.Bot):
     def __init__(self):
         intents = discord.Intents.all()
         super().__init__(command_prefix="!", intents=intents)
-        print(os.path.dirname(os.path.realpath(__file__)))
         self.handlers = [
             f"cogs.{handler.removesuffix('.py')}"
-            for handler in os.listdir(os.path.dirname(os.path.realpath(__file__))+("/cogs"))
+            for handler in os.listdir(
+                os.path.dirname(os.path.realpath(__file__)) + ("/cogs")
+            )
             if handler.endswith(".py") and not handler.startswith("_")
         ]
         self.db: Database = MongoClient(os.getenv("DATABASE_URI"))[
@@ -117,7 +118,7 @@ class Bot(commands.Bot):
 
         await self.tree.sync()
 
-    async def sync_commands(self)->None:
+    async def sync_commands(self) -> None:
         await self.tree.sync()
 
     async def on_ready(self) -> None:
@@ -199,27 +200,25 @@ class Bot(commands.Bot):
             guilds = self.db.get_collection("Guilds")
             guilds.update_one({"_id": guild_id}, {"$set": guild.to_json()}, upsert=True)
 
-    async def  set_role_message(
-            self,
-            guild: discord.Guild,
-            message: discord.Message=None
+    async def set_role_message(
+        self, guild: discord.Guild, message: discord.Message = None
     ) -> None:
-        '''
+        """
         Add message ID for role reactions to the db
         This overwrite any existing message used for role tracking
-        
+
         Parameters
         ----------
         guild : discord.Guild
             The guild requesting a new setup
         message : discord.Message
             The message for tracking reactions
-        
+
         Returns
         -------
         bool
             True if successful, False otherwise
-        '''
+        """
 
         guild = await self.get_guild(guild.id)
         if not guild:
@@ -227,7 +226,7 @@ class Bot(commands.Bot):
         db = self.db.get_collection("Guilds")
         db.update_one(
             {"_id": guild.id},
-            {"$set": {"role_message":message.id if message else None}},
+            {"$set": {"role_message": message.id if message else None}},
             upsert=True,
         )
 
@@ -239,8 +238,8 @@ class Bot(commands.Bot):
         if not guild:
             raise ValueError(f"Guild: {guild.id} not found!")
         db = self.db.get_collection("Guilds")
-        guild = db.find_one({"_id":guild.id})
-        return int(guild['role_message'])
+        guild = db.find_one({"_id": guild.id})
+        return int(guild["role_message"])
 
     async def set_roles(
         self,
@@ -275,44 +274,47 @@ class Bot(commands.Bot):
         )
 
     async def set_groups(
-        self,
-        guild: discord.Guild,
-        groups: list[Group] = None
+        self, guild: discord.Guild, groups: list[Group] = None
     ) -> None:
-        '''
+        """
         Add groups to a guild in the db
 
         Overwrites any previously set groups.
-        '''
+        """
         guild = await self.get_guild(guild.id)
         if not guild:
             raise ValueError(f"Guild {guild.id} not found!")
-        
+
         db = self.db.get_collection("Guilds")
         db.update_one(
             {"_id": guild.id},
-            {"$set": 
-                {"groups": [group.to_json() for group in groups]} if groups else []},
+            {
+                "$set": (
+                    {"groups": [group.to_json() for group in groups]} if groups else []
+                )
+            },
             upsert=True,
         )
-    
-    async def get_guild_roles(self, guild:discord.Guild) -> dict[discord.Emoji, discord.Role]:
-        '''
+
+    async def get_guild_roles(
+        self, guild: discord.Guild
+    ) -> dict[discord.Emoji, discord.Role]:
+        """
         Get roles for one guild from the database
-        
+
         Parameters
         ----------
         guild : discord.Guild
             The guild to search for
-        
+
         Returns
         -------
         roles : dict[discord.Emoji, discord.Role]
             Dict with key-val mapping of linked emojis and roles.
-        '''
+        """
         db = self.db.get_collection("Guilds")
-        guild = Guild(**db.find_one({"_id":guild.id}))
-        return guild.roles
+        guild = Guild(**db.find_one({"_id": guild.id}))
+        return guild.groups
 
     async def get_all_roles(self) -> dict[dict[discord.Emoji, discord.Role]]:
         """
@@ -331,19 +333,23 @@ class Bot(commands.Bot):
         guild = db.find_one({"_id": guild.id})
         return Guild(**guild).groups
 
-    async def get_persistent_text_channels(self, guild: discord.Guild) -> list[TextChannel]:
+    async def get_persistent_text_channels(
+        self, guild: discord.Guild
+    ) -> list[TextChannel]:
         db = self.db.get_collection("Guilds")
-        _guild = Guild(**db.find_one({"_id":guild.id}))
+        _guild = Guild(**db.find_one({"_id": guild.id}))
         return _guild.persistent_text_channels
 
-    async def set_persistent_text_channels(self, guild:discord.Guild, persistent_text_channels:list[int]=[])->list[TextChannel]:
+    async def set_persistent_text_channels(
+        self, guild: discord.Guild, persistent_text_channels: list[int] = []
+    ) -> list[TextChannel]:
         guild = self.get_guild(guild.id)
         if not guild:
             raise ValueError(f"Guild: {guild.id} not found")
         db = self.db.get_collection("Guilds")
         db.update_one(
             {"_id": guild.id},
-            {"$set":{"persistent_text_channels":persistent_text_channels}},
+            {"$set": {"persistent_text_channels": persistent_text_channels}},
             upsert=True,
         )
 

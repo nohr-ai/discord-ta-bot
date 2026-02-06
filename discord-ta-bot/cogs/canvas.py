@@ -1,9 +1,9 @@
 import os
 import discord
-import asyncio
+import logging
 from discord import app_commands
 from discord.app_commands.checks import has_permissions
-from discord.ext import commands, tasks
+from discord.ext import commands
 from canvasapi import Canvas as cv
 from objects.canvas_course import Course
 from dateutil import parser
@@ -28,6 +28,7 @@ class Canvas(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.canvas_handle = cv(os.getenv("CANVAS_URL"), os.getenv("CANVAS_TOKEN"))
+        self.logger = logging.getLogger(__name__)
 
     @has_permissions(administrator=True)
     async def canvas_add_course_autocomplete(

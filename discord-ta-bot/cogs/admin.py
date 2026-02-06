@@ -1,6 +1,7 @@
 import os
 import discord
 import asyncio
+import logging
 from discord import app_commands
 from discord.ext import commands
 from discord.app_commands.checks import has_permissions
@@ -9,6 +10,7 @@ from discord.app_commands.checks import has_permissions
 class Admin(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.logger = logging.getLogger(__name__)
 
     @app_commands.command(
         name="load",
@@ -63,7 +65,7 @@ class Admin(commands.Cog):
     ) -> list[app_commands.Choice[str]]:
         extensions = [
             app_commands.Choice(name=file[:-3], value=file[:-3])
-            for file in os.listdir("cogs")
+            for file in os.listdir(os.path.dirname(os.path.realpath(__file__)))
             if file.startswith(module) and file.endswith(".py")
         ]
         return extensions
@@ -92,18 +94,18 @@ class Admin(commands.Cog):
         None
         """
         try:
-            self.bot.log.info(f"Reloading {module}")
-            self.bot.log.debug(
+            self.logger.info(f"Reloading {module}")
+            self.logger.debug(
                 f"User [{interaction.user.id}] from [{interaction.guild_id}] reloading {module}"
             )
             await self.bot.reload_extension(f"cogs.{module}")
         except commands.ExtensionError as e:
-            self.bot.log.error(f"Error loading {module}: {e}")
+            self.logger.error(f"Error loading {module}: {e}")
             await interaction.response.send_message(
                 f"Error loading {module}: {e}", ephemeral=True
             )
         else:
-            self.bot.log.info(f"Reloaded {module}")
+            self.logger.info(f"Reloaded {module}")
             await interaction.response.send_message(f"Loaded {module}.", ephemeral=True)
 
     @app_commands.command(
