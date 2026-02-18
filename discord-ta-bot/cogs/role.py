@@ -12,13 +12,15 @@ from objects.guild import Guild
 from discord import app_commands, PermissionOverwrite
 from discord.ext import commands
 from discord.app_commands.checks import has_permissions
+from utils.db import *
 
 # Yikes, TODO: Cleanup
 fpath = os.path.dirname(os.path.realpath(__file__))
-emojipath = os.path.join(fpath,"..","..","assets","emojis.json")
-EMOJIS:dict = {}
-with open(emojipath,"r") as emojis:
+emojipath = os.path.join(fpath, "..", "..", "assets", "emojis.json")
+EMOJIS: dict = {}
+with open(emojipath, "r") as emojis:
     EMOJIS = json.load(emojis)
+
 
 class Role(commands.Cog):
     """
@@ -32,65 +34,79 @@ class Role(commands.Cog):
     """
 
     def __init__(self, bot):
-        self.bot:Bot = bot
-        self.logger:logging.Logger = logging.getLogger(__name__)
+        self.bot: Bot = bot
+        self.logger: logging.Logger = logging.getLogger(__name__)
 
     @app_commands.command(
         name="start_semester",
-        description="Setup automatic role-assignment, expected format: "
+        description="Setup automatic role-assignment, expected format: ",
     )
     @has_permissions(administrator=True)
-    async def start_semester(self, interaction: discord.Interaction, number_of_groups:str)->None:
-        '''
+    async def start_semester(
+        self, interaction: discord.Interaction, number_of_groups: str
+    ) -> None:
+        """
         Start a semester by
             Setting up groups with their private text and voice channels.
             Setting up landing reaction message to automagically assign roles after user reaction
-        '''
+        """
         # Embed responses only support 25 fields...
         if int(number_of_groups) > 25:
-            await interaction.response.send_message("Currently only supports upto 25 groups, soz", ephemeral=True)
+            await interaction.response.send_message(
+                "Currently only supports upto 25 groups, soz", ephemeral=True
+            )
             return
 
-        await interaction.response.defer(ephemeral=True,thinking=True)
+        await interaction.response.defer(ephemeral=True, thinking=True)
 
         response = discord.Embed(
             title="React to this post to get a role",
             color=discord.Color.green(),
         )
-        
+
         guild = interaction.guild
         text_channels = await guild.create_category("group_text_channels")
         voice_channels = await guild.create_category("group_voice_channels")
         landing_channel = await text_channels.create_text_channel("landing🛬")
 
         default_deny = PermissionOverwrite(view_channel=False)
-        group_text_permissions = PermissionOverwrite(read_messages=True,send_messages=True,read_message_history=True)
-        group_voice_permissions = PermissionOverwrite(connect=True,speak=True,stream=True)
-        
+        group_text_permissions = PermissionOverwrite(
+            read_messages=True, send_messages=True, read_message_history=True
+        )
+        group_voice_permissions = PermissionOverwrite(
+            connect=True, speak=True, stream=True
+        )
+
         emojis = random.sample(list(EMOJIS.values()), k=int(number_of_groups))
-        
+
         # We bundle discord roles, and groups/TA groups into a group object for easier reference later on.
         try:
-            groups:list[Group] = []
-            for id in range(1,int(number_of_groups)+1):
+            groups: list[Group] = []
+            for id in range(1, int(number_of_groups) + 1):
                 name = f"group_{id}"
                 role = await guild.create_role(name=name)
                 emoji = emojis.pop()
                 groups.append(Group(name, emoji, role.id))
-                await text_channels.create_text_channel(name, overwrites={
-                    guild.default_role: default_deny,
-                    role: group_text_permissions
-                })
-                await voice_channels.create_voice_channel(name,overwrites={
-                    guild.default_role: default_deny,
-                    role: group_voice_permissions
-                })
+                await text_channels.create_text_channel(
+                    name,
+                    overwrites={
+                        guild.default_role: default_deny,
+                        role: group_text_permissions,
+                    },
+                )
+                await voice_channels.create_voice_channel(
+                    name,
+                    overwrites={
+                        guild.default_role: default_deny,
+                        role: group_voice_permissions,
+                    },
+                )
                 response.add_field(
-                    name=f'{emoji} -> {name}',
+                    name=f"{emoji} -> {name}",
                     value="",
                     inline=False,
                 )
-            await self.bot.set_groups(guild,groups)
+            await self.bot.set_groups(guild, groups)
             message = await landing_channel.send(embed=response)
             for group in groups:
                 await message.add_reaction(group.emoji)
@@ -103,7 +119,7 @@ class Role(commands.Cog):
                 try:
                     await landing_channel.delete()
                     await role.delete()
-                    tc = discord.utils.get(guild.text_channels,name=f"{group.name}")
+                    tc = discord.utils.get(guild.text_channels, name=f"{group.name}")
                     await tc.delete()
                     vc = discord.utils.get(guild.voice_channels, name=f"{group.name}")
                     await vc.delete()
@@ -115,20 +131,29 @@ class Role(commands.Cog):
 
     @app_commands.command(
         name="end_semester",
-        description="Move old students to alumni and remove channels."
+        description="Move old students to alumni and remove channels.",
     )
     @has_permissions(administrator=True)
-    async def end_semester(self, interaction:discord.Interaction):
+    async def end_semester(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True, thinking=True)
         guild = interaction.guild
-        groups = await self.bot.get_groups(guild)
+        # groups = await self.bot.get_groups(guild)
+        groups = await get_guild_groups(self.bot.db_name, guild.id)
+        groups = [Group(**g) for g in groups]
+
+        # Get or create alumni role for guild
         alumni = discord.utils.get(guild.roles, name="Alumni")
         if not alumni:
             alumni = await guild.create_role(name="Alumni")
+
         # Archive the old channels with year-prefix and under 'archived_text/voice_channels"
-        archived_text_channels = discord.utils.get(guild.categories, name="Archived_text_channels")
+        archived_text_channels = discord.utils.get(
+            guild.categories, name="Archived_text_channels"
+        )
         if not archived_text_channels:
-            archived_text_channels = await guild.create_category("Archived_text_channels")
+            archived_text_channels = await guild.create_category(
+                "Archived_text_channels"
+            )
 
         # Prefix the channels with this year
         year = datetime.now(timezone.utc).year
@@ -138,40 +163,41 @@ class Role(commands.Cog):
             for member in members:
                 await member.add_roles(alumni)
             text_channel = discord.utils.get(guild.text_channels, name=group.name)
-            await text_channel.edit(name=f'{year}-{group.name}')
-            await text_channel.edit(category=archived_text_channels)
+            if text_channel:
+                await text_channel.edit(name=f"{year}-{group.name}")
+                await text_channel.edit(category=archived_text_channels)
             voice_channel = discord.utils.get(guild.voice_channels, name=group.name)
-            await voice_channel.delete()
-            
+            if voice_channel:
+                await voice_channel.delete()
+
             # Originally wanted to just delete these chats, but someone uttered a desire to keep them.
             # await text_channel.delete()
             # await voice_channel.delete()
             await role.edit(name=f"{group.name}_{year}")
 
-        await self.bot.set_role_message(guild)
+        await set_role_message(self.bot.db_name, guild.id)
         await discord.utils.get(guild.categories, name="group_text_channels").delete()
-        await discord.utils.get(guild.categories, name='group_voice_channels').delete()
+        await discord.utils.get(guild.categories, name="group_voice_channels").delete()
 
         landing_channel = discord.utils.get(guild.channels, name="landing🛬")
         # As the admins can use the landing channel to send commands
         # We followup on the interaction before deleting this channel, otherwise we might end up
         # with dangling interactions.
-        await interaction.followup.send("Semester end, all groups removed and moved to alumni", ephemeral=True)
+        await interaction.followup.send(
+            "Semester end, all groups removed and moved to alumni", ephemeral=True
+        )
         await landing_channel.delete()
 
-            
-
-
-    async def get_reaction_role(self, guild:discord.Guild, emoji:discord.PartialEmoji) -> discord.Role:
+    async def get_reaction_role(
+        self, guild: discord.Guild, emoji: discord.PartialEmoji
+    ) -> discord.Role:
         try:
-            internal_guild:Guild = await self.bot.get_guild(guild.id)
+            internal_guild: Guild = await self.bot.get_guild(guild.id)
             for group in internal_guild.groups:
                 if group.emoji == emoji.name:
                     return discord.utils.get(guild.roles, name=group.name)
         except ValueError as ve:
             self.logger.exception(ve)
-
-
 
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
@@ -186,7 +212,10 @@ class Role(commands.Cog):
         if payload.user_id == self.bot.user.id:
             return
         internal_guild = await self.bot.get_guild(payload.guild_id)
-        if not internal_guild.role_message or payload.message_id != internal_guild.role_message:
+        if (
+            not internal_guild.role_message
+            or payload.message_id != internal_guild.role_message
+        ):
             self.logger.debug(f"Message {payload.message_id} not role message")
             return
         discord_guild = discord.utils.get(self.bot.guilds, id=payload.guild_id)
@@ -220,6 +249,7 @@ class Role(commands.Cog):
         role = await self.get_reaction_role(discord_guild, payload.emoji)
         self.logger.info(f"Removing role {role.name} from {member.name}")
         await member.remove_roles(role)
+
 
 async def setup(bot):
     await bot.add_cog(Role(bot))
