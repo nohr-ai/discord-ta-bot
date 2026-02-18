@@ -3,10 +3,13 @@ import logging
 from logging.handlers import RotatingFileHandler
 from pymongo.database import Database
 from pymongo import MongoClient
+import pymongo
 from typing import Optional
 from objects.canvas_course import Course
 from objects import Guild
 from objects.group import Group
+from utils.db import *
+
 import discord
 from dotenv import load_dotenv, find_dotenv
 from discord.ext import commands
@@ -46,9 +49,8 @@ class Bot(commands.Bot):
             )
             if handler.endswith(".py") and not handler.startswith("_")
         ]
-        self.db: Database = MongoClient(os.getenv("DATABASE_URI", ""))[
-            os.getenv("DATABASE_NAME", "")
-        ]
+        self.db_name = os.getenv("DATABASE_NAME", "")
+        self.db: Database = get_db(self.db_name)
         self._guilds: dict[int, Guild] = {}
         self.log = self.setup_logging()
 
@@ -125,14 +127,15 @@ class Bot(commands.Bot):
         """
         After backend is up and running, setup frontend and load all guilds
         """
+        guilds = await get_guilds(self.db_name)
+        guilds = guilds.find()
+        guild_ids = [int(guild["_id"]) for guild in guilds]
 
-        for g in self.db.get_collection("Guilds").find():
-            self._guilds[g["_id"]] = Guild(**g)
+        # Guilds with the bot installed
         for guild in self.guilds:
-            if guild.id not in self._guilds:
-                self._guilds[guild.id] = Guild(_id=guild.id, name=guild.name)
-                self.db.get_collection("Guilds").insert_one(
-                    self._guilds[guild.id].to_json()
+            if guild.id not in guild_ids:
+                await set_guild(
+                    self.db_name, Guild(_id=guild.id, name=guild.name).to_json()
                 )
 
     async def unload_all(self) -> None:
@@ -142,39 +145,17 @@ class Bot(commands.Bot):
         for c in self.handlers:
             await self.unload_extension(c)
 
-    async def get_guilds(self) -> list[Guild]:
-        """
-        Get all guilds from the database
+    # async def get_guilds(self) -> list[Guild]:
+    #     """
+    #     Get all guilds from the database
 
-        Returns
-        -------
-        list[Guild]
-            List of guilds
-        """
-        guilds = self.db.get_collection("Guilds")
-        return [Guild(**g) for g in guilds.find()]
-
-    async def get_guild(self, guild_id: int) -> Optional[Guild]:
-        """
-        TODO: Move to DB sdk
-        Get a guild from the database
-
-        Parameters
-        ----------
-        guild_id : int
-            The guild id
-
-        Returns
-        -------
-        Optional[Guild]
-            The guild object
-        """
-        guilds = self.db.get_collection("Guilds")
-        guild = guilds.find_one({"_id": guild_id})
-        if guild:
-            return Guild(**guild)
-        else:
-            raise ValueError(f"Guild: {guild_id} not found!")
+    #     Returns
+    #     -------
+    #     list[Guild]
+    #         List of guilds
+    #     """
+    #     guilds = self.db.get_collection("Guilds")
+    #     return [Guild(**g) for g in guilds.find()]
 
     async def add_canvas_course(self, guild_id: int, course: Course) -> None:
         """
@@ -202,175 +183,85 @@ class Bot(commands.Bot):
             guilds = self.db.get_collection("Guilds")
             guilds.update_one({"_id": guild_id}, {"$set": guild.to_json()}, upsert=True)
 
-    async def set_role_message(
-        self, guild: discord.Guild, message: discord.Message | None = None
-    ) -> None:
-        """
-        TODO: move to db sdk
-        Add message ID for role reactions to the db
-        This overwrite any existing message used for role tracking
+    # async def set_roles(
+    #     self,
+    #     guild: discord.Guild,
+    #     emojis_roles: dict[discord.Emoji, discord.Role],
+    # ) -> None:
+    #     """
+    #     TODO: move to DB sdk
+    #     Add roles to the database
+    #     This overwrites any existing roles for a guild
 
-        Parameters
-        ----------
-        guild : discord.Guild
-            The guild requesting a new setup
-        message : discord.Message
-            The message for tracking reactions
+    #     Parameters
+    #     ----------
+    #     guild : discord.Guild
+    #         The guild object.
+    #     emojis_roles : dict[discord.Emoji,discord.Role]
+    #         Dictionary of emojis and roles
 
-        Returns
-        -------
-        bool
-            True if successful, False otherwise
-        """
+    #     Returns
+    #     -------
+    #     bool
+    #         True if successful, False otherwise
+    #     """
+    #     guild = await self.get_guild(guild.id)
+    #     if not guild:
+    #         raise ValueError(f"Guild {guild.id} not found!")
 
-        guild = await self.get_guild(guild.id)
-        if not guild:
-            raise ValueError(f"Guild: {guild.id} not found!")
-        db = self.db.get_collection("Guilds")
-        db.update_one(
-            {"_id": guild.id},
-            {"$set": {"role_message": message.id if message else None}},
-            upsert=True,
-        )
+    #     db = self.db.get_collection("Guilds")
+    #     db.update_one(
+    #         {"_id": guild.id},
+    #         {"$set": {"roles": {str(k): v.id for k, v in emojis_roles.items()}}},
+    #         upsert=True,
+    #     )
 
-    async def get_role_message(
-        self,
-        guild: discord.Guild,
-    ) -> int:
-        """
-        TODO: move to DB sdk
-        """
-        guild = await self.get_guild(guild.id)
-        if not guild:
-            raise ValueError(f"Guild: {guild.id} not found!")
-        db = self.db.get_collection("Guilds")
-        guild = db.find_one({"_id": guild.id})
-        return int(guild["role_message"])
+    # async def get_all_roles(self) -> dict[dict[discord.Emoji, discord.Role]]:
+    #     """
+    #     TOOD: move to db sdk
+    #     Get all roles from the database
 
-    async def set_roles(
-        self,
-        guild: discord.Guild,
-        emojis_roles: dict[discord.Emoji, discord.Role],
-    ) -> None:
-        """
-        TODO: move to DB sdk
-        Add roles to the database
-        This overwrites any existing roles for a guild
+    #     Returns
+    #     -------
+    #     dict[dict[discord.Emoji,discord.Role]]
+    #         Dictionary of emoji-role dictionaries
+    #     """
+    #     db = self.db.get_collection("Guilds")
+    #     return {g["_id"]: g["roles"] for g in db.find()}
 
-        Parameters
-        ----------
-        guild : discord.Guild
-            The guild object.
-        emojis_roles : dict[discord.Emoji,discord.Role]
-            Dictionary of emojis and roles
+    # async def get_groups(self, guild: discord.Guild) -> list[Group]:
+    #     """
+    #     TODO: move to db sdk
+    #     """
+    #     db = self.db.get_collection("Guilds")
+    #     guild = db.find_one({"_id": guild.id})
+    #     return Guild(**guild).groups
 
-        Returns
-        -------
-        bool
-            True if successful, False otherwise
-        """
-        guild = await self.get_guild(guild.id)
-        if not guild:
-            raise ValueError(f"Guild {guild.id} not found!")
+    # async def get_persistent_text_channels(
+    #     self, guild: discord.Guild
+    # ) -> list[TextChannel]:
+    #     """
+    #     TODO: move to db sdk
+    #     """
+    #     db = self.db.get_collection("Guilds")
+    #     _guild = Guild(**db.find_one({"_id": guild.id}))
+    #     return _guild.persistent_text_channels
 
-        db = self.db.get_collection("Guilds")
-        db.update_one(
-            {"_id": guild.id},
-            {"$set": {"roles": {str(k): v.id for k, v in emojis_roles.items()}}},
-            upsert=True,
-        )
-
-    async def set_groups(
-        self, guild: discord.Guild, groups: list[Group] = None
-    ) -> None:
-        """
-        TODO: move to db sdk
-        Add groups to a guild in the db
-
-        Overwrites any previously set groups.
-        """
-        guild = await self.get_guild(guild.id)
-        if not guild:
-            raise ValueError(f"Guild {guild.id} not found!")
-
-        db = self.db.get_collection("Guilds")
-        db.update_one(
-            {"_id": guild.id},
-            {
-                "$set": (
-                    {"groups": [group.to_json() for group in groups]} if groups else []
-                )
-            },
-            upsert=True,
-        )
-
-    async def get_guild_roles(
-        self, guild: discord.Guild
-    ) -> dict[discord.Emoji, discord.Role]:
-        """
-        TOOD: move to db sdk
-        Get roles for one guild from the database
-
-        Parameters
-        ----------
-        guild : discord.Guild
-            The guild to search for
-
-        Returns
-        -------
-        roles : dict[discord.Emoji, discord.Role]
-            Dict with key-val mapping of linked emojis and roles.
-        """
-        db = self.db.get_collection("Guilds")
-        guild = Guild(**db.find_one({"_id": guild.id}))
-        return guild.groups
-
-    async def get_all_roles(self) -> dict[dict[discord.Emoji, discord.Role]]:
-        """
-        TOOD: move to db sdk
-        Get all roles from the database
-
-        Returns
-        -------
-        dict[dict[discord.Emoji,discord.Role]]
-            Dictionary of emoji-role dictionaries
-        """
-        db = self.db.get_collection("Guilds")
-        return {g["_id"]: g["roles"] for g in db.find()}
-
-    async def get_groups(self, guild: discord.Guild) -> list[Group]:
-        """
-        TODO: move to db sdk
-        """
-        db = self.db.get_collection("Guilds")
-        guild = db.find_one({"_id": guild.id})
-        return Guild(**guild).groups
-
-    async def get_persistent_text_channels(
-        self, guild: discord.Guild
-    ) -> list[TextChannel]:
-        """
-        TODO: move to db sdk
-        """
-        db = self.db.get_collection("Guilds")
-        _guild = Guild(**db.find_one({"_id": guild.id}))
-        return _guild.persistent_text_channels
-
-    async def set_persistent_text_channels(
-        self, guild: discord.Guild, persistent_text_channels: list[int] = []
-    ) -> list[TextChannel]:
-        """
-        TODO: move to db sdk
-        """
-        guild = self.get_guild(guild.id)
-        if not guild:
-            raise ValueError(f"Guild: {guild.id} not found")
-        db = self.db.get_collection("Guilds")
-        db.update_one(
-            {"_id": guild.id},
-            {"$set": {"persistent_text_channels": persistent_text_channels}},
-            upsert=True,
-        )
+    # async def set_persistent_text_channels(
+    #     self, guild: discord.Guild, persistent_text_channels: list[int] = []
+    # ) -> list[TextChannel]:
+    #     """
+    #     TODO: move to db sdk
+    #     """
+    #     guild = self.get_guild(guild.id)
+    #     if not guild:
+    #         raise ValueError(f"Guild: {guild.id} not found")
+    #     db = self.db.get_collection("Guilds")
+    #     db.update_one(
+    #         {"_id": guild.id},
+    #         {"$set": {"persistent_text_channels": persistent_text_channels}},
+    #         upsert=True,
+    #     )guilds = get_guilds(self.db_name)
 
 
 if __name__ == "__main__":
