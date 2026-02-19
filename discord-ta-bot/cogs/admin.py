@@ -32,7 +32,9 @@ class Admin(commands.Cog):
         description="Delete groups with a prefix",
     )
     @has_permissions(administrator=True)
-    async def delete_gruops(self, interaction:discord.Interaction, prefix: str)-> None:
+    async def delete_gruops(
+        self, interaction: discord.Interaction, prefix: str
+    ) -> None:
         await interaction.response.defer(ephemeral=True, thinking=True)
         guild = interaction.guild
 
@@ -41,6 +43,30 @@ class Admin(commands.Cog):
                 await role.delete()
 
         await interaction.followup.send("Done", ephemeral=True)
+
+    @app_commands.command(
+        name="delete_chats", description="Delete chats(text and voice) with prefix"
+    )
+    @has_permissions(administrator=True)
+    async def delete_chats(self, interaction: discord.Interaction, prefix: str) -> None:
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        guild = interaction.guild
+        tc = [
+            textch for textch in guild.text_channels if textch.name.startswith(prefix)
+        ]
+        vc = [
+            voicech
+            for voicech in guild.voice_channels
+            if voicech.name.startswith(prefix)
+        ]
+        for channel in tc:
+            await channel.delete()
+        for channel in vc:
+            await channel.delete()
+        await interaction.followup.send(
+            f"Deleted {len(tc)} text channels and {len(vc)} voice channels starting with: {prefix}",
+            ephemeral=True,
+        )
 
     @app_commands.command(
         name="unload",

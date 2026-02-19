@@ -106,27 +106,28 @@ class Role(commands.Cog):
                     value="",
                     inline=False,
                 )
-            await self.bot.set_groups(guild, groups)
+            await set_guild_groups(self.bot.db_name, guild.id, groups)
             message = await landing_channel.send(embed=response)
             for group in groups:
                 await message.add_reaction(group.emoji)
-            await self.bot.set_role_message(guild, message)
+            # await self.bot.set_role_message(guild, message)
+            await set_role_message(self.bot.db_name, guild.id, message)
             await interaction.followup.send("Setup complete")
         except Exception as e:
             self.logger.exception(e)
+            await landing_channel.delete()
             for group in groups:
-                role = guild.get_role(group.role_id)
                 try:
-                    await landing_channel.delete()
-                    await role.delete()
+                    role = guild.get_role(group.role_id)
                     tc = discord.utils.get(guild.text_channels, name=f"{group.name}")
                     await tc.delete()
                     vc = discord.utils.get(guild.voice_channels, name=f"{group.name}")
                     await vc.delete()
-                    await text_channels.delete()
-                    await voice_channels.delete()
+                    await role.delete()
                 except Exception as ee:
                     self.logger.exception(ee)
+            await text_channels.delete()
+            await voice_channels.delete()
             await interaction.followup.send(f"Setup abort: {e}")
 
     @app_commands.command(
@@ -192,7 +193,10 @@ class Role(commands.Cog):
         self, guild: discord.Guild, emoji: discord.PartialEmoji
     ) -> discord.Role:
         try:
-            internal_guild: Guild = await self.bot.get_guild(guild.id)
+            # internal_guild: Guild = await self.bot.get_guild(guild.id)
+            internal_guild: dict = await get_guild(self.bot.db_name, guild.id)
+            internal_guild: Guild = Guild(**internal_guild)
+
             for group in internal_guild.groups:
                 if group.emoji == emoji.name:
                     return discord.utils.get(guild.roles, name=group.name)
@@ -211,7 +215,9 @@ class Role(commands.Cog):
         """
         if payload.user_id == self.bot.user.id:
             return
-        internal_guild = await self.bot.get_guild(payload.guild_id)
+        # internal_guild = await self.bot.get_guild(payload.guild_id)
+        internal_guild = await get_guild(self.bot.db_name, payload.guild_id)
+        internal_guild = Guild(**internal_guild)
         if (
             not internal_guild.role_message
             or payload.message_id != internal_guild.role_message
@@ -238,8 +244,8 @@ class Role(commands.Cog):
         """
         if payload.user_id == self.bot.user.id:
             return
-        guild = await self.bot.get_guild(payload.guild_id)
-        if not guild.role_message or payload.message_id != guild.role_message:
+        guild = await get_guild(self.bot.db_name, payload.guild_id)
+        if not guild["role_message"] or payload.message_id != guild["role_message"]:
             self.logger.debug(f"Message {payload.message_id} not found")
             return
         discord_guild = discord.utils.get(self.bot.guilds, id=payload.guild_id)
