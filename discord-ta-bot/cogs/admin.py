@@ -1,10 +1,14 @@
 import os
+from typing import Optional
 import discord
 import asyncio
 import logging
 from discord import app_commands
 from discord.ext import commands
 from discord.app_commands.checks import has_permissions
+from discord.ext.commands.parameters import CurrentChannel
+
+import utils.db as db
 
 
 class Admin(commands.Cog):
@@ -176,6 +180,185 @@ class Admin(commands.Cog):
         """
         await interaction.response.send_message("Rebooting", ephemeral=True)
         await self.bot.close()
+
+    @has_permissions(administrator=True)
+    async def list_text_channels(
+        self, interaction: discord.Interaction, name: str
+    ) -> list[app_commands.Choice[str]]:
+        # Get all individual channels, remove ongoing autocomplete for next
+        already_chosen = [
+            name
+            for name in [nm.strip() for nm in name.split(",") if name]
+            if name in [ch.name for ch in interaction.guild.text_channels]
+        ]
+        already_chosen_ids = [
+            str(channel.id)
+            for channel in interaction.guild.text_channels
+            if channel.name in already_chosen
+        ]
+
+        channels = [
+            app_commands.Choice(
+                name=(
+                    ",".join(already_chosen + [channel.name]) if name else channel.name
+                ),
+                value=(
+                    ",".join(already_chosen_ids + [str(channel.id)])
+                    if name
+                    else str(channel.id)
+                ),
+            )
+            for channel in interaction.guild.text_channels
+            if channel.name.startswith(name.split(",")[-1])
+            and channel.name not in already_chosen
+        ]
+        return channels
+
+    @app_commands.command(
+        name="set_persistent_text_channels",
+        description="Overwrite current text_channels kept persistent over the semesters",
+    )
+    @app_commands.autocomplete(channels=list_text_channels)
+    @has_permissions(administrator=True)
+    async def set_persistent_text_channels(
+        self, interaction: discord.Interaction, channels: Optional[str]
+    ) -> None:
+        print(f"in set_p_t_c input:{channels}")
+        if channels:
+            existing_channels = [ch.id for ch in interaction.guild.text_channels]
+            channels = [int(ch.strip()) for ch in channels.split(",")]
+            channels = [ch for ch in channels if ch in existing_channels]
+        else:
+            channels = []
+        await db.set_persistent_text_channels(
+            self.bot.db_name, interaction.guild.id, channels
+        )
+        await interaction.response.send_message(f"in s_p_t_c got list of; {channels}")
+
+    @has_permissions(administrator=True)
+    async def list_not_persistent_text_channels(
+        self, interaction: discord.Interaction, name: str
+    ) -> list[app_commands.Choice[str]]:
+        print("In lsitnot autocompl")
+        existing = await db.get_persistent_text_channels(
+            self.bot.db_name, interaction.guild.id
+        )
+        print(name)
+        self.logger.warning(name)
+        possible = []
+        for ch in interaction.guild.text_channels:
+            if ch.id not in existing:
+                possible.append((ch.name, ch.id))
+        print(possible)
+        self.logger.warning(possible)
+        channels = [
+            app_commands.Choice(
+                name=chname,
+                value=str(chid),
+            )
+            for chname, chid in possible
+            if chname.startswith(name)
+        ]
+        print(channels)
+        self.logger.warning(channels)
+        return channels
+
+    @app_commands.command(
+        name="add_persistent_text_channel",
+        description="Add a text channel to the list of persistent text channels",
+    )
+    @app_commands.autocomplete(channel=list_not_persistent_text_channels)
+    @has_permissions(administrator=True)
+    async def add_persistent_text_channel(
+        self, interaction: discord.Interaction, channel: str
+    ) -> None:
+        channel = int(channel)
+        print(f"aptc in: {channel}")
+        persisted_channels = await db.get_persistent_text_channels(
+            self.bot.db_name, interaction.guild.id
+        )
+        print(f"aptc pers: {persisted_channels}")
+        if channel not in persisted_channels:
+            await db.add_persistent_text_channel(
+                self.bot.db_name, interaction.guild.id, channel
+            )
+
+        await interaction.response.send_message(f"Input apvc: {channel}")
+
+    @has_permissions(administrator=True)
+    async def list_persisted_text_channels(
+        self, interaction: discord.Interaction, name: str
+    ) -> list[app_commands.Choice[str]]:
+        persistent = await db.get_persistent_text_channels(
+            self.bot.db_name, interaction.guild.id
+        )
+        persistent = [
+            (channel.name, channel.id)
+            for channel in interaction.guild.text_channels
+            if channel.id in persistent
+        ]
+        channels = [
+            app_commands.Choice(
+                name=chname,
+                value=str(chid),
+            )
+            for chname, chid in persistent
+        ]
+        return channels
+
+    @app_commands.command(
+        name="remove_persistent_text_channel",
+        description="Remove a text channel from list of persistent text channel",
+    )
+    @app_commands.autocomplete(channel=list_persisted_text_channels)
+    @has_permissions(administrator=True)
+    async def remove_persistent_text_channel(
+        self, interaction: discord.Interaction, channel: str
+    ) -> None:
+        print(f"in rptc: {channel}")
+        persistent = await db.get_persistent_text_channels(
+            self.bot.db_name, interaction.guild.id
+        )
+        channel = int(channel)
+        if channel in persistent:
+            await db.remove_persistent_text_channel(
+                self.bot.db_name, interaction.guild.id, channel
+            )
+        await interaction.response.send_message(f"Input rptc: {channel}")
+
+    @has_permissions(administrator=True)
+    async def list_voice_channels(
+        self, interaction: discord.Interaction, name: str
+    ) -> list[app_commands.Choice[str]]:
+        channels = [
+            app_commands.Choice(name=channel.name, value=channel.name)
+            for channel in interaction.guild.voice_channels
+            if channel.name.startswith(name)
+        ]
+        return channels
+
+    @app_commands.command(
+        name="set_persistent_voice_channels",
+        description="Overwrite persistent voice channels",
+    )
+    @app_commands.autocomplete(channels=list_voice_channels)
+    @has_permissions(administrator=True)
+    async def set_persistent_voice_channels(
+        self, interaction: discord.Interaction, channels: str
+    ) -> None:
+        self.logger.debug(f"in set_p_v_c input: {channels}")
+        # Safeguard for gibberish channels
+        if channels:
+            available_channels = [ch.id for ch in interaction.guild.voice_channels]
+            channels = [int(ch.strip()) for ch in channels.split(",")]
+            channels = [ch for ch in channels if ch in available_channels]
+        else:
+            channels = []
+        await db.set_persistent_voice_channels(
+            self.bot.db_name, interaction.guild.id, channels
+        )
+
+        await interaction.response.send_message(f"in s_p_v_c input: {channels}")
 
 
 async def setup(bot):

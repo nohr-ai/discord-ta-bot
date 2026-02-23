@@ -255,6 +255,64 @@ async def set_persistent_text_channels(
     )
 
 
+async def add_persistent_text_channel(
+    db_name: str, guild_id: int, text_channel: int, upsert=True
+) -> None:
+    """
+    Add a text channel to list of persistent channels for a guild
+
+    Parameters:
+    -----------
+    db_name: str
+        Name of db to insert to
+    guild_id: int
+        Identifier for discord guild
+    text_channel: int
+        Identifier for text channel
+    upsert: bool
+        Insert document if not found, defaults to True
+
+    Returns:
+    --------
+    None
+    """
+    guilds: Collection = await get_guilds(db_name)
+    guilds.update_one(
+        {"_id": guild_id},
+        {"$push": {"persistent_text_channels": text_channel}},
+        upsert=upsert,
+    )
+
+
+async def remove_persistent_text_channel(
+    db_name: str, guild_id: int, text_channel: int, upsert=False
+) -> None:
+    """
+    Remove a text channel from the list of persistent text channels for a guild
+
+    Parameters:
+    -----------
+    db_name: str
+        Name of db to insert to
+    guild_id: int
+        Identifier for discord guild
+    text_channel: int
+        Identifier for text channel
+    upsert: bool
+        Insert document if not found, defaults to True
+
+    Returns:
+    --------
+    None
+    """
+    guilds: Collection = await get_guilds(db_name)
+    guilds.update_one(
+        {"_id": guild_id},
+        {"$pull": {"persistent_text_channels": text_channel}},
+        upsert=upsert,
+    )
+
+
 async def get_persistent_voice_channels(db_name: str, guild_id: int) -> list[int]:
     """
         Get all persistent voice channels for a guild
@@ -296,3 +354,68 @@ async def set_persistent_voice_channels(
     -------
     None
     """
+
+    guilds: Collection = await get_guilds(db_name)
+    guilds.update_one(
+        {"_id": guild_id},
+        {"$set": {"persistent_voice_channels": voice_channels}},
+        upsert=True,
+    )
+
+
+async def add_persistent_voice_channel(
+    db_name: str, guild_id: int, voice_channel: int, upsert=True
+) -> None:
+    """
+    Add a voice channel to list of persistent channels for a guild
+
+    Parameters:
+    -----------
+    db_name: str
+        Name of db to insert to
+    guild_id: int
+        Identifier for discord guild
+    voice_channel: int
+        Identifier for voice channel
+    upsert: bool
+        Insert document if not found, defaults to True
+
+    Returns:
+    --------
+    None
+    """
+    guilds: Collection = await get_guilds(db_name)
+    guilds.update_one(
+        {"_id": guild_id},
+        {"$push": {"persistent_voice_channels": voice_channel}},
+        upsert=upsert,
+    )
+
+
+async def remove_persistent_voice_channel(
+    db_name: str, guild_id: int, voice_channel: int, upsert=False
+) -> None:
+    """
+    Remove a voice channel from the list of persistent voice channels for a guild
+
+    Parameters:
+    -----------
+    db_name: str
+        Name of db to insert to
+    guild_id: int
+        Identifier for discord guild
+    voice_channel: int
+        Identifier for voice channel
+    upsert: bool
+        Insert document if not found, defaults to True
+
+    Returns:
+    --------
+    None
+    """
+    guilds: Collection = await get_guilds(db_name)
+    guilds.update_one(
+        {"_id": guild_id},
+        {"$pull": {"persistent_voice_channels": voice_channel}},
+        upsert=upsert,
+    )
