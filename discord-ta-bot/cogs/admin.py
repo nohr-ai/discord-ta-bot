@@ -3,7 +3,7 @@ from typing import Optional
 import discord
 import asyncio
 import logging
-from discord import app_commands
+from discord import ChannelFlags, app_commands
 from discord.ext import commands
 from discord.app_commands.checks import has_permissions
 from discord.ext.commands.parameters import CurrentChannel
@@ -49,7 +49,8 @@ class Admin(commands.Cog):
         await interaction.followup.send("Done", ephemeral=True)
 
     @app_commands.command(
-        name="delete_chats", description="Delete chats(text and voice) with prefix"
+        name="delete_channels",
+        description="Delete channels(text and voice) with prefix",
     )
     @has_permissions(administrator=True)
     async def delete_chats(self, interaction: discord.Interaction, prefix: str) -> None:
@@ -330,10 +331,33 @@ class Admin(commands.Cog):
     async def list_voice_channels(
         self, interaction: discord.Interaction, name: str
     ) -> list[app_commands.Choice[str]]:
-        channels = [
-            app_commands.Choice(name=channel.name, value=channel.name)
+
+        # Get all individual channels, remove ongoing autocomplete for next
+        already_chosen = [
+            name
+            for name in [nm.strip() for nm in name.split(",") if name]
+            if name in [ch.name for ch in interaction.guild.voice_channels]
+        ]
+        already_chosen_ids = [
+            str(channel.id)
             for channel in interaction.guild.voice_channels
-            if channel.name.startswith(name)
+            if channel.name in already_chosen
+        ]
+
+        channels = [
+            app_commands.Choice(
+                name=(
+                    ",".join(already_chosen + [channel.name]) if name else channel.name
+                ),
+                value=(
+                    ",".join(already_chosen_ids + [str(channel.id)])
+                    if name
+                    else str(channel.id)
+                ),
+            )
+            for channel in interaction.guild.voice_channels
+            if channel.name.startswith(name.split(",")[-1])
+            and channel.name not in already_chosen
         ]
         return channels
 
@@ -344,7 +368,7 @@ class Admin(commands.Cog):
     @app_commands.autocomplete(channels=list_voice_channels)
     @has_permissions(administrator=True)
     async def set_persistent_voice_channels(
-        self, interaction: discord.Interaction, channels: str
+        self, interaction: discord.Interaction, channels: Optional[str]
     ) -> None:
         self.logger.debug(f"in set_p_v_c input: {channels}")
         # Safeguard for gibberish channels
@@ -359,6 +383,101 @@ class Admin(commands.Cog):
         )
 
         await interaction.response.send_message(f"in s_p_v_c input: {channels}")
+
+    @has_permissions(administrator=True)
+    async def list_not_persisted_voice_channels(
+        self, interaction: discord.Interaction, name: str
+    ) -> list[app_commands.Choice[str]]:
+        existing = await db.get_persistent_voice_channels(
+            self.bot.db_name, interaction.guild.id
+        )
+        possible = []
+        for ch in interaction.guild.voice_channels:
+            if ch.id not in existing:
+                possible.append((ch.name, ch.id))
+
+        channels = [
+            app_commands.Choice(
+                name=chname,
+                value=str(chid),
+            )
+            for chname, chid in possible
+            if chname.startswith(name)
+        ]
+
+        return channels
+
+    @app_commands.command(
+        name="add_persistent_voice_channel",
+        description="Overwrite current voice channels kept persistent over the semesters",
+    )
+    @app_commands.autocomplete(channel=list_not_persisted_voice_channels)
+    @has_permissions(administrator=True)
+    async def add_persistent_voice_channel(
+        self, interaction: discord.Interaction, channel: str
+    ) -> None:
+        if not channel:
+            await interaction.response.send_message(
+                "Please provide a channel ID", ephemeral=True
+            )
+            return
+
+        channel = int(channel)
+        persisted_channels = await db.get_persistent_voice_channels(
+            self.bot.db_name, interaction.guild.id
+        )
+        if channel not in persisted_channels:
+            await db.add_persistent_voice_channel(
+                self.bot.db_name, interaction.guild.id, channel
+            )
+
+        await interaction.response.send_message(f"Channel {channel} persisted")
+
+    @has_permissions(administrator=True)
+    async def list_persisted_voice_channels(
+        self, interaction: discord.Interaction, name: str
+    ) -> list[app_commands.Choice[str]]:
+        persistent = await db.get_persistent_voice_channels(
+            self.bot.db_name, interaction.guild.id
+        )
+        persistent = [
+            (channel.name, channel.id)
+            for channel in interaction.guild.voice_channels
+            if channel.id in persistent
+        ]
+        channels = [
+            app_commands.Choice(
+                name=chname,
+                value=str(chid),
+            )
+            for chname, chid in persistent
+        ]
+        return channels
+
+    @app_commands.command(
+        name="remove_persistent_voice_channel",
+        description="Remove a channel from list of persistent channels",
+    )
+    @app_commands.autocomplete(channel=list_persisted_voice_channels)
+    @has_permissions(administrator=True)
+    async def remove_persistent_voice_channels(
+        self, interaction: discord.Interaction, channel: str
+    ) -> None:
+        if not channel:
+            await interaction.response.send_message("Please provide a channel ID")
+            return
+
+        persistent_channels = await db.get_persistent_voice_channels(
+            self.bot.db_name, interaction.guild.id
+        )
+        channel = int(channel)
+        if channel in persistent_channels:
+            await db.remove_persistent_voice_channel(
+                self.bot.db_name, interaction.guild.id, channel
+            )
+            await interaction.response.send_message(f"Removed {channel}")
+        else:
+            await interaction.response.send_message(f"Channel {channel} not found")
 
 
 async def setup(bot):
