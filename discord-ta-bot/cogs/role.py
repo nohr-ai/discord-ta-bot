@@ -12,7 +12,7 @@ from objects.guild import Guild
 from discord import app_commands, PermissionOverwrite
 from discord.ext import commands
 from discord.app_commands.checks import has_permissions
-from utils.db import *
+import utils.db as db
 
 # Yikes, TODO: Cleanup
 fpath = os.path.dirname(os.path.realpath(__file__))
@@ -79,9 +79,9 @@ class Role(commands.Cog):
 
         emojis = random.sample(list(EMOJIS.values()), k=int(number_of_groups))
 
+        groups: list[Group] = []
         # We bundle discord roles, and groups/TA groups into a group object for easier reference later on.
         try:
-            groups: list[Group] = []
             for id in range(1, int(number_of_groups) + 1):
                 name = f"group_{id}"
                 role = await guild.create_role(name=name)
@@ -106,12 +106,12 @@ class Role(commands.Cog):
                     value="",
                     inline=False,
                 )
-            await set_guild_groups(self.bot.db_name, guild.id, groups)
+            await db.set_guild_groups(self.bot.db_name, guild.id, groups)
             message = await landing_channel.send(embed=response)
             for group in groups:
                 await message.add_reaction(group.emoji)
             # await self.bot.set_role_message(guild, message)
-            await set_role_message(self.bot.db_name, guild.id, message)
+            await db.set_role_message(self.bot.db_name, guild.id, message)
             await interaction.followup.send("Setup complete")
         except Exception as e:
             self.logger.exception(e)
@@ -139,7 +139,7 @@ class Role(commands.Cog):
         await interaction.response.defer(ephemeral=True, thinking=True)
         guild = interaction.guild
         # groups = await self.bot.get_groups(guild)
-        groups = await get_guild_groups(self.bot.db_name, guild.id)
+        groups = await db.get_guild_groups(self.bot.db_name, guild.id)
         groups = [Group(**g) for g in groups]
 
         # Get or create alumni role for guild
@@ -176,7 +176,7 @@ class Role(commands.Cog):
             # await voice_channel.delete()
             await role.edit(name=f"{group.name}_{year}")
 
-        await set_role_message(self.bot.db_name, guild.id)
+        await db.set_role_message(self.bot.db_name, guild.id)
         await discord.utils.get(guild.categories, name="group_text_channels").delete()
         await discord.utils.get(guild.categories, name="group_voice_channels").delete()
 
@@ -194,7 +194,7 @@ class Role(commands.Cog):
     ) -> discord.Role:
         try:
             # internal_guild: Guild = await self.bot.get_guild(guild.id)
-            internal_guild: dict = await get_guild(self.bot.db_name, guild.id)
+            internal_guild: dict = await db.get_guild(self.bot.db_name, guild.id)
             internal_guild: Guild = Guild(**internal_guild)
 
             for group in internal_guild.groups:
@@ -216,7 +216,7 @@ class Role(commands.Cog):
         if payload.user_id == self.bot.user.id:
             return
         # internal_guild = await self.bot.get_guild(payload.guild_id)
-        internal_guild = await get_guild(self.bot.db_name, payload.guild_id)
+        internal_guild = await db.get_guild(self.bot.db_name, payload.guild_id)
         internal_guild = Guild(**internal_guild)
         if (
             not internal_guild.role_message
@@ -244,7 +244,7 @@ class Role(commands.Cog):
         """
         if payload.user_id == self.bot.user.id:
             return
-        guild = await get_guild(self.bot.db_name, payload.guild_id)
+        guild = await db.get_guild(self.bot.db_name, payload.guild_id)
         if not guild["role_message"] or payload.message_id != guild["role_message"]:
             self.logger.debug(f"Message {payload.message_id} not found")
             return
