@@ -30,14 +30,16 @@ class Admin(commands.Cog):
         description="Delete groups with a prefix",
     )
     @has_permissions(administrator=True)
-    async def delete_gruops(self, interaction:discord.Interaction, prefix: str)-> None:
+    async def delete_gruops(
+        self, interaction: discord.Interaction, prefix: str
+    ) -> None:
         await interaction.response.defer(ephemeral=True, thinking=True)
         guild = interaction.guild
 
         for role in guild.roles:
             if role.name.startswith(prefix):
                 await role.delete()
-
+        # TODO: Remove from DB is persisted
         await interaction.followup.send("Done", ephemeral=True)
 
     @app_commands.command(
