@@ -5,11 +5,10 @@ import json
 import random
 import time
 
-from discord.types.channel import ChannelTypeWithoutThread
 from Bot import Bot
 import logging
 from datetime import datetime, timezone
-import objects.group as internalGroup
+from objects.group import Group as internalGroup
 from objects.guild import Guild
 from discord import (
     RoleSubscriptionInfo,
@@ -17,6 +16,7 @@ from discord import (
     VoiceChannel,
     app_commands,
     PermissionOverwrite,
+    Permissions,
 )
 from discord.ext import commands
 from discord.app_commands.checks import has_permissions
@@ -67,15 +67,15 @@ class Role(commands.Cog):
 
     async def create_groups(
         self, guild: discord.Guild, number_of_roles: int
-    ) -> list[Group]:
-        default_deny = discord.Permissions.none()
+    ) -> list[internalGroup]:
+        default_deny = discord.PermissionOverwrite(view_channel=False)
         emojis = random.sample(list(EMOJIS.values()), k=number_of_roles)
-        groups: list[Group] = []
+        groups: list[internalGroup] = []
         for id in range(1, number_of_roles + 1):
             name = f"group_{id}"
-            role = await guild.create_role(name=name, permissions=default_deny)
+            role = await guild.create_role(name=name)
             emoji = emojis.pop()
-            groups.append(Group(name, emoji, role.id))
+            groups.append(internalGroup(name, emoji, role.id))
 
         return groups
 
@@ -88,49 +88,54 @@ class Role(commands.Cog):
         return category
 
     async def setup_group_channels(
-        self, guild: discord.Guild, groups: list[internalGroup.Group]
+        self, guild: discord.Guild, groups: list[internalGroup]
     ) -> None:
-        default_deny = discord.Permissions.none()
+        default_deny = discord.PermissionOverwrite(view_channel=False)
         text_channel_category: discord.CategoryChannel = await self.get_group_category(
             guild, "group_text_channels"
         )
-        text_channel_category.set_permissions(guild.default_role, default_deny)
+        await text_channel_category.set_permissions(
+            guild.default_role, overwrite=default_deny
+        )
         voice_channel_category: discord.CategoryChannel = await self.get_group_category(
             guild, "group_voice_channels"
         )
-        voice_channel_category.set_permissions(guild.default_role, default_deny)
+        await voice_channel_category.set_permissions(
+            guild.default_role, overwrite=default_deny
+        )
 
-        text_channel_category.create_text_channel(
+        await text_channel_category.create_text_channel(
             "landing🛬",
             overwrites={
-                guild.default_role,
-                default_deny,
-                guild.default_role,
-                discord.PermissionOverwrite(view_channel=True, add_reactions=True),
+                guild.default_role: default_deny,
+                guild.default_role: discord.PermissionOverwrite(
+                    view_channel=True, add_reactions=True
+                ),
             },
         )
         for group in groups:
             role = guild.get_role(group.role_id)
             await text_channel_category.create_text_channel(
-                name,
+                group.name,
                 overwrites={
                     guild.default_role: default_deny,
                     role: self.group_text_permissions,
                 },
             )
             await voice_channel_category.create_voice_channel(
-                name,
+                group.name,
                 overwrites={
                     guild.default_role: default_deny,
                     role: self.group_voice_permissions,
                 },
             )
 
-    def create_landing_response(self, groups: list[Group]) -> discord.Embed:
-        response = discord.Embed(
-            title="React to this post to get a role",
-            color=discord.Color.green(),
-        )
+    def create_landing_response(
+        self,
+        groups: list[internalGroup],
+        color: discord.Color.green() = discord.Color.green(),
+    ) -> discord.Embed:
+        response = discord.Embed(title="React to this post to get a role", color=color)
 
         for group in groups:
             response.add_field(
@@ -141,7 +146,7 @@ class Role(commands.Cog):
 
     async def setup_groups(
         self, guild: discord.Guild, number_of_groups: int
-    ) -> list[internalGroup.Group]:
+    ) -> list[internalGroup]:
         groups = await self.create_groups(guild, number_of_groups)
         await self.setup_group_channels(guild, groups)
 
@@ -156,14 +161,14 @@ class Role(commands.Cog):
             )
         return student_role
 
-    def setup_landing(
-        self, guild: discord.Guild, groups: list[internalGroup.Group]
-    ) -> None:
+    async def setup_landing(
+        self, guild: discord.Guild, groups: list[internalGroup]
+    ) -> discord.Message:
         landing_channel = discord.utils.get(guild.channels, name="landing🛬")
         response = self.create_landing_response(groups)
-        await landing_channel.send(embed=response)
+        return await landing_channel.send(embed=response)
 
-    def setup_shared_resources(
+    async def setup_shared_resources(
         self, guild: discord.Guild, students: discord.Role
     ) -> None:
         shared_resource_category = discord.utils.get(
@@ -204,80 +209,86 @@ class Role(commands.Cog):
         await interaction.response.defer(ephemeral=True, thinking=True)
 
         groups = await self.setup_groups(interaction.guild, int(number_of_groups))
-        student = await self.setup_student(guild)
-        await self.setup_shared_resources(guild, student)
-        await self.setup_landing(guild, groups)
+        await db.set_guild_groups(self.bot.db_name, interaction.guild.id, groups)
+        student = await self.setup_student(interaction.guild)
+        await self.setup_shared_resources(interaction.guild, student)
+        message = await self.setup_landing(interaction.guild, groups)
         # TODO: restore to db
-        response = discord.Embed(
-            title="React to this post to get a role",
-            color=discord.Color.green(),
-        )
+        for group in groups:
+            await message.add_reaction(group.emoji)
 
-        guild = interaction.guild
-        text_channels = await guild.create_category("group_text_channels")
-        voice_channels = await guild.create_category("group_voice_channels")
-        landing_channel = await text_channels.create_text_channel("landing🛬")
+        await db.set_role_message(self.bot.db_name, interaction.guild.id, message)
+        await interaction.followup.send("Setup complete")
+        # response = discord.Embed(
+        #     title="React to this post to get a role",
+        #     color=discord.Color.green(),
+        # )
 
-        default_deny = PermissionOverwrite(view_channel=False)
-        group_text_permissions = PermissionOverwrite(
-            read_messages=True, send_messages=True, read_message_history=True
-        )
-        group_voice_permissions = PermissionOverwrite(
-            connect=True, speak=True, stream=True
-        )
+        # guild = interaction.guild
+        # text_channels = await guild.create_category("group_text_channels")
+        # voice_channels = await guild.create_category("group_voice_channels")
+        # landing_channel = await text_channels.create_text_channel("landing🛬")
 
-        emojis = random.sample(list(EMOJIS.values()), k=int(number_of_groups))
+        # default_deny = PermissionOverwrite(view_channel=False)
+        # group_text_permissions = PermissionOverwrite(
+        #     read_messages=True, send_messages=True, read_message_history=True
+        # )
+        # group_voice_permissions = PermissionOverwrite(
+        #     connect=True, speak=True, stream=True
+        # )
 
-        groups: list[Group] = []
-        # We bundle discord roles, and groups/TA groups into a group object for easier reference later on.
-        try:
-            for id in range(1, int(number_of_groups) + 1):
-                name = f"group_{id}"
-                role = await guild.create_role(name=name)
-                emoji = emojis.pop()
-                groups.append(Group(name, emoji, role.id))
-                await text_channels.create_text_channel(
-                    name,
-                    overwrites={
-                        guild.default_role: default_deny,
-                        role: group_text_permissions,
-                    },
-                )
-                await voice_channels.create_voice_channel(
-                    name,
-                    overwrites={
-                        guild.default_role: default_deny,
-                        role: group_voice_permissions,
-                    },
-                )
-                response.add_field(
-                    name=f"{emoji} -> {name}",
-                    value="",
-                    inline=False,
-                )
-            await db.set_guild_groups(self.bot.db_name, guild.id, groups)
-            message = await landing_channel.send(embed=response)
-            for group in groups:
-                await message.add_reaction(group.emoji)
-            # await self.bot.set_role_message(guild, message)
-            await db.set_role_message(self.bot.db_name, guild.id, message)
-            await interaction.followup.send("Setup complete")
-        except Exception as e:
-            self.logger.exception(e)
-            await landing_channel.delete()
-            for group in groups:
-                try:
-                    role = guild.get_role(group.role_id)
-                    tc = discord.utils.get(guild.text_channels, name=f"{group.name}")
-                    await tc.delete()
-                    vc = discord.utils.get(guild.voice_channels, name=f"{group.name}")
-                    await vc.delete()
-                    await role.delete()
-                except Exception as ee:
-                    self.logger.exception(ee)
-            await text_channels.delete()
-            await voice_channels.delete()
-            await interaction.followup.send(f"Setup abort: {e}")
+        # emojis = random.sample(list(EMOJIS.values()), k=int(number_of_groups))
+
+        # groups: list[Group] = []
+        # # We bundle discord roles, and groups/TA groups into a group object for easier reference later on.
+        # try:
+        #     for id in range(1, int(number_of_groups) + 1):
+        #         name = f"group_{id}"
+        #         role = await guild.create_role(name=name)
+        #         emoji = emojis.pop()
+        #         groups.append(Group(name, emoji, role.id))
+        #         await text_channels.create_text_channel(
+        #             name,
+        #             overwrites={
+        #                 guild.default_role: default_deny,
+        #                 role: group_text_permissions,
+        #             },
+        #         )
+        #         await voice_channels.create_voice_channel(
+        #             name,
+        #             overwrites={
+        #                 guild.default_role: default_deny,
+        #                 role: group_voice_permissions,
+        #             },
+        #         )
+        #         response.add_field(
+        #             name=f"{emoji} -> {name}",
+        #             value="",
+        #             inline=False,
+        #         )
+        #     await db.set_guild_groups(self.bot.db_name, guild.id, groups)
+        #     message = await landing_channel.send(embed=response)
+        #     for group in groups:
+        #         await message.add_reaction(group.emoji)
+        #     # await self.bot.set_role_message(guild, message)
+        #     await db.set_role_message(self.bot.db_name, guild.id, message)
+        #     await interaction.followup.send("Setup complete")
+        # except Exception as e:
+        #     self.logger.exception(e)
+        #     await landing_channel.delete()
+        #     for group in groups:
+        #         try:
+        #             role = guild.get_role(group.role_id)
+        #             tc = discord.utils.get(guild.text_channels, name=f"{group.name}")
+        #             await tc.delete()
+        #             vc = discord.utils.get(guild.voice_channels, name=f"{group.name}")
+        #             await vc.delete()
+        #             await role.delete()
+        #         except Exception as ee:
+        #             self.logger.exception(ee)
+        #     await text_channels.delete()
+        #     await voice_channels.delete()
+        #     await interaction.followup.send(f"Setup abort: {e}")
 
     @app_commands.command(
         name="end_semester",
@@ -289,7 +300,7 @@ class Role(commands.Cog):
         guild = interaction.guild
         # groups = await self.bot.get_groups(guild)
         groups = await db.get_guild_groups(self.bot.db_name, guild.id)
-        groups = [Group(**g) for g in groups]
+        groups = [internalGroup(**g) for g in groups]
 
         # Get or create alumni role for guild
         alumni = discord.utils.get(guild.roles, name="Alumni")
