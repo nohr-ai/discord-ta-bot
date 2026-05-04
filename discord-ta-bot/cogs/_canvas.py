@@ -15,7 +15,7 @@ class Canvas(commands.Cog):
     Main class for the canvas module.
     This cog is used to interact with the canvas api.
     It requires the following environment variables:
-    
+
     - CANVAS_URL(Base url for your canvas instance)
     - CANVAS_TOKEN
 
@@ -23,6 +23,10 @@ class Canvas(commands.Cog):
     ----------
     bot : commands.Bot
         The bot object.
+
+    NOTE: This cog is currently disabled (prefixed with `_`) pending a
+    stateless redesign. The `add_canvas_course` method on Bot has been
+    removed as part of the DB-removal refactor.
     """
 
     def __init__(self, bot):
@@ -60,9 +64,7 @@ class Canvas(commands.Cog):
             The course code.
         """
         course = self.canvas_handle.get_course(course_code)
-        await self.bot.add_canvas_course(
-            interaction.guild.id, Course(course.name, course.id)
-        )
+        # TODO: persist course without MongoDB once stateless redesign is complete
         await interaction.response.send_message(
             f"Loaded {course_code}.", ephemeral=True
         )
