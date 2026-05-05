@@ -67,6 +67,38 @@ class Admin(commands.Cog):
         await interaction.followup.send("Done", ephemeral=True)
 
     @app_commands.command(
+        name="delete_channels",
+        description="Delete channels(text and voice) with given sprefix",
+    )
+    @has_permissions(administrator=True)
+    async def delete_channels(
+        self, interaction: discord.Interaction, prefix: str
+    ) -> None:
+        if not prefix:
+            await interaction.response.send_message(
+                "Prefix must be something", ephemeral=True
+            )
+            return
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        guild = interaction.guild
+        tc = [
+            textch for textch in guild.text_channels if textch.name.startswith(prefix)
+        ]
+        vc = [
+            voicech
+            for voicech in guild.voice_channels
+            if voicech.name.startswith(prefix)
+        ]
+        for channel in tc:
+            await channel.delete()
+        for channel in vc:
+            await channel.delete()
+        await interaction.followup.send(
+            f"Deleted {len(tc)} text channels and {len(vc)} voice channels starting with: {prefix}",
+            ephemeral=True,
+        )
+
+    @app_commands.command(
         name="unload",
         description="Unload a module.",
     )
