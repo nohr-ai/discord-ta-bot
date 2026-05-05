@@ -361,6 +361,7 @@ class Role(commands.Cog):
             alumni_role = await guild.create_role(
                 name="Alumni",
                 reason=f"Created by bot at end of semester {year}",
+                hoist=True,
             )
             self.logger.info("Created Alumni role")
 
