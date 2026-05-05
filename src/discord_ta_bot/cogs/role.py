@@ -2,7 +2,6 @@ import re
 import discord
 import logging
 from datetime import datetime, timezone
-
 from ..Bot import Bot
 from discord import app_commands
 from discord.ext import commands
@@ -11,8 +10,6 @@ from discord.app_commands.checks import has_permissions
 
 GROUP_ROLE_PATTERN = re.compile(r"^(\d{4})_group_(\d+)$")
 ONBOARDING_PROMPT_TITLE = "Which group are you in?"
-
-EMOJIS: dict = json.load(open("../assets/emojis.json", "r"))
 
 
 class Role(commands.Cog):
