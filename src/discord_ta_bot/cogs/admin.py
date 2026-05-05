@@ -22,7 +22,6 @@ class Admin(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    # @has_permissions(administrator=True)
     async def get_all_extensions(
         self, interaction: discord.Interaction, module: str
     ) -> list[app_commands.Choice[str]]:
