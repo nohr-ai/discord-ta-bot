@@ -100,7 +100,7 @@ class Role(commands.Cog):
                 warnings.append(msg)
                 roles.append(existing)
             else:
-                role = await guild.create_role(name=name)
+                role = await guild.create_role(name=name, hoist=True)
                 self.logger.info(f"Created role: {role.name}")
                 roles.append(role)
         return roles, warnings
