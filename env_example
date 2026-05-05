@@ -1,19 +1,9 @@
 # Logging
 LOGFILE_SIZE=1000000
 LOGFILE_COUNT=10
-LOGIFLE_FORMAT="%(levelname)s %(name)s %(asctime)s - %(message)s"
+LOGFILE_FORMAT="%(levelname)s %(name)s %(asctime)s - %(message)s"
+# All relative to home
+LOGFILE_BASE_PATH=".local/state/discord-ta-bot"
 
 # Discord
 DISCORD_TOKEN=""
-
-# Canvas
-CANVAS_TOKEN=""
-CANVAS_URL=""
-
-# Github
-GITHUB_TOKEN=""
-GITHUB_URL=""
-
-# Database
-DATABASE_URI="mongodb://localhost:27017/<database>"
-DATABASE_NAME=""

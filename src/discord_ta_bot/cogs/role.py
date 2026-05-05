@@ -3,7 +3,7 @@ import discord
 import logging
 from datetime import datetime, timezone
 
-from Bot import Bot
+from ..Bot import Bot
 from discord import app_commands
 from discord.ext import commands
 from discord.app_commands.checks import has_permissions
@@ -76,6 +76,8 @@ class Role(commands.Cog):
             missing.append("`manage_roles`")
         if not perms.manage_guild:
             missing.append("`manage_guild`")
+        if not perms.manage_channels:
+            missing.append("manage channels")
         if missing:
             return f"Bot is missing required permissions: {', '.join(missing)}."
         return None
@@ -334,9 +336,7 @@ class Role(commands.Cog):
         year_prefix = f"{year}_group_"
 
         group_roles = [
-            role
-            for role in guild.roles
-            if GROUP_ROLE_PATTERN.match(role.name) and role.name.startswith(year_prefix)
+            role for role in guild.roles if role.name.startswith(year_prefix)
         ]
 
         if not group_roles:
@@ -370,9 +370,6 @@ class Role(commands.Cog):
         warnings: list[str] = []
 
         for role in group_roles:
-            match = GROUP_ROLE_PATTERN.match(role.name)
-            n = match.group(2)
-            archive_channel_name = f"{year}-group_{n}"
 
             # Assign Alumni to every member of this group
             for member in list(role.members):
@@ -399,12 +396,12 @@ class Role(commands.Cog):
                     ),
                 }
                 await text_channel.edit(
-                    name=archive_channel_name,
+                    name=role.name,
                     category=archived_category,
                     overwrites=overwrites,
                 )
                 self.logger.info(
-                    f"Archived text channel `{role.name}` → `{archive_channel_name}` "
+                    f"Archived text channel `{role.name}` "
                     f"(read-only for {role.name})"
                 )
             else:

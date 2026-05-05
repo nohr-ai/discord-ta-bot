@@ -1,19 +1,45 @@
 import os
 import discord
 import asyncio
+import logging
 from discord import app_commands
 from discord.ext import commands
 from discord.app_commands.checks import has_permissions
 
 
 class Admin(commands.Cog):
+    """
+    Admin module
+
+    Responsible for dynamic handling of modules, group/channel bulk deletion
+
+    Parameters:
+    -----------
+    bot: discord.commands.Bot
+        The bot this cog is loaded from
+    """
+
     def __init__(self, bot):
         self.bot = bot
+
+    # @has_permissions(administrator=True)
+    async def get_all_extensions(
+        self, interaction: discord.Interaction, module: str
+    ) -> list[app_commands.Choice[str]]:
+        extensions = [
+            app_commands.Choice(
+                name=file.removesuffix(".py"), value=file.removesuffix(".py")
+            )
+            for file in os.listdir(os.path.dirname(os.path.realpath(__file__)))
+            if file.startswith(module) and file.endswith(".py")
+        ]
+        return extensions
 
     @app_commands.command(
         name="load",
         description="Load a module.",
     )
+    @app_commands.autocomplete(module=get_all_extensions)
     @has_permissions(administrator=True)
     async def load(self, interaction: discord.Interaction, module: str):
         try:
@@ -30,7 +56,7 @@ class Admin(commands.Cog):
         description="Delete groups with a prefix",
     )
     @has_permissions(administrator=True)
-    async def delete_gruops(
+    async def delete_groups(
         self, interaction: discord.Interaction, prefix: str
     ) -> None:
         await interaction.response.defer(ephemeral=True, thinking=True)
@@ -39,36 +65,25 @@ class Admin(commands.Cog):
         for role in guild.roles:
             if role.name.startswith(prefix):
                 await role.delete()
-        # TODO: Remove from DB is persisted
         await interaction.followup.send("Done", ephemeral=True)
 
     @app_commands.command(
         name="unload",
         description="Unload a module.",
     )
+    @app_commands.autocomplete(module=get_all_extensions)
     @has_permissions(administrator=True)
     async def unload(self, interaction: discord.Interaction, module: str):
         try:
             await self.bot.unload_extension(f"cogs.{module}")
         except commands.ExtensionError as e:
             await interaction.response.send_message(
-                f"Error loading {module}: {e}", ephemeral=True
+                f"Error unloading {module}: {e}", ephemeral=True
             )
         else:
             await interaction.response.send_message(
                 f"Unloaded {module}.", ephemeral=True
             )
-
-    @has_permissions(administrator=True)
-    async def get_all_extensions(
-        self, interaction: discord.Interaction, module: str
-    ) -> list[app_commands.Choice[str]]:
-        extensions = [
-            app_commands.Choice(name=file[:-3], value=file[:-3])
-            for file in os.listdir("cogs")
-            if file.startswith(module) and file.endswith(".py")
-        ]
-        return extensions
 
     @app_commands.command(
         name="reload_extension",
@@ -100,13 +115,15 @@ class Admin(commands.Cog):
             )
             await self.bot.reload_extension(f"cogs.{module}")
         except commands.ExtensionError as e:
-            self.bot.log.error(f"Error loading {module}: {e}")
+            self.logger.error(f"Error reloading {module}: {e}")
             await interaction.response.send_message(
-                f"Error loading {module}: {e}", ephemeral=True
+                f"Error reloading {module}: {e}", ephemeral=True
             )
         else:
-            self.bot.log.info(f"Reloaded {module}")
-            await interaction.response.send_message(f"Loaded {module}.", ephemeral=True)
+            self.logger.info(f"Reloaded {module}")
+            await interaction.response.send_message(
+                f"Reloaded {module}.", ephemeral=True
+            )
 
     @app_commands.command(
         name="sync",
