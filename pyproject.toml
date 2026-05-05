@@ -1,25 +1,25 @@
-[tool.poetry]
+[project]
 name = "discord-ta-bot"
-version = "0.1.0"
-packages = [{ include = "discord-ta-bot" }]
-description = "Discord bot for TA life. Role-assignment, canvas and github intergration"
-authors = ["nohr-ai <oyvind.a.nohr@uit.no>"]
+version = "0.1.1"
+description = "Discord bot for TA life. Role-assignment, canvas and github integration"
 readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "discord-py>=2.7.0",
+    "python-dotenv>=1.2.2",
+]
 
-[tool.poetry.dependencies]
-python = "^3.10"
-discord = "^2.3.2"
-asyncio = "^3.4.3"
-python-dotenv = "^1.0.0"
-pymongo = "^4.6.0"
-canvasapi = "^3.2.0"
+[project.scripts]
+discord-ta-bot = "discord_ta_bot.Bot:main"
 
-[tool.poetry.group.dev.dependencies]
-sphinx = "^7.2.6"
-sphinx-autoapi = "^3.0.0"
-sphinx-rtd-theme = "^2.0.0"
-myst-nb = "^1.0.0"
+[dependency-groups]
+docs = [
+    "sphinx>=7.2.6",
+    "sphinx-autoapi>=3.0.0",
+    "sphinx-rtd-theme>=2.0.0",
+    "myst-nb>=1.0.0",
+]
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["uv_build>=0.9.22,<0.12"]
+build-backend = "uv_build"

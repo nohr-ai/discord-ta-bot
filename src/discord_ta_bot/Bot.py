@@ -1,10 +1,15 @@
 import os
+import pathlib
 import logging
 from logging.handlers import RotatingFileHandler
 
 import discord
 from dotenv import load_dotenv, find_dotenv
 from discord.ext import commands
+
+_DEFAULT_LOG_PATH = pathlib.Path.home() / ".local" / "state" / "discord-ta-bot"
+
+__all__ = ["Bot"]
 
 
 class Bot(commands.Bot):
@@ -16,10 +21,6 @@ class Bot(commands.Bot):
     - LOGFILE_FORMAT
     - LOGFILE_SIZE
     - LOGFILE_COUNT
-
-    Optional environment variables:
-    - CANVAS_TOKEN
-    - GITHUB_PA_TOKEN
 
     It requires the following discord intents:
     - all
@@ -33,15 +34,13 @@ class Bot(commands.Bot):
     def __init__(self):
         intents = discord.Intents.all()
         super().__init__(command_prefix="!", intents=intents)
-        print(os.path.dirname(os.path.realpath(__file__)))
-        self.handlers = [
-            f"cogs.{handler.removesuffix('.py')}"
-            for handler in os.listdir(
-                os.path.dirname(os.path.realpath(__file__)) + ("/cogs")
-            )
-            if handler.endswith(".py") and not handler.startswith("_")
+
+        self.cog_modules = [
+            f"discord_ta_bot.cogs.{cog.name.removesuffix('.py')}"
+            for cog in (pathlib.Path(__file__).parent / "cogs").iterdir()
+            if cog.name.endswith(".py") and not cog.name.startswith("_")
         ]
-        self.log = self.setup_logging()
+        self.setup_logging()
 
     def setup_logging(self) -> None:
         """
@@ -50,45 +49,64 @@ class Bot(commands.Bot):
         Sizes and counts are controlled via LOGFILE_SIZE and LOGFILE_COUNT.
         """
         formatter = logging.Formatter(os.getenv("LOGFILE_FORMAT"))
+
+        log_path = (
+            pathlib.Path.home()
+            / os.getenv("LOGFILE_BASE_PATH", _DEFAULT_LOG_PATH)
+            / f"{self.__class__.__name__}.log"
+        )
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+
         normal_handler = RotatingFileHandler(
-            f"{self.__class__.__name__}.log",
-            maxBytes=int(os.getenv("LOGFILE_SIZE")),
-            backupCount=int(os.getenv("LOGFILE_COUNT")),
+            log_path,
+            maxBytes=int(os.getenv("LOGFILE_SIZE", 100)),
+            backupCount=int(os.getenv("LOGFILE_COUNT", 1)),
         )
         normal_handler.setFormatter(formatter)
         normal_handler.setLevel(logging.WARNING)
 
+        debug_path = (
+            pathlib.Path.home()
+            / os.getenv("LOGFILE_BASE_PATH", _DEFAULT_LOG_PATH)
+            / "debug"
+            / f"{self.__class__.__name__}.debug.log"
+        )
+        debug_path.parent.mkdir(parents=True, exist_ok=True)
+
         debug_handler = RotatingFileHandler(
-            f"{self.__class__.__name__}.debug.log",
-            maxBytes=int(os.getenv("LOGFILE_SIZE")),
-            backupCount=int(os.getenv("LOGFILE_COUNT")),
+            debug_path,
+            maxBytes=int(os.getenv("LOGFILE_SIZE", 100)),
+            backupCount=int(os.getenv("LOGFILE_COUNT", 1)),
         )
         debug_handler.setFormatter(formatter)
         debug_handler.setLevel(logging.DEBUG)
 
         logger = logging.getLogger()
         logger.setLevel(logging.DEBUG)
-        logger.propagate = False
         logger.addHandler(normal_handler)
         logger.addHandler(debug_handler)
         return logger
 
     async def setup_hook(self) -> None:
         """Load all cogs and sync slash commands globally."""
-        for handler in self.handlers:
-            await self.load_extension(handler)
+        for cog in self.cog_modules:
+            await self.load_extension(cog)
         await self.tree.sync()
 
     async def unload_all(self) -> None:
         """Unload all cogs."""
-        for c in self.handlers:
-            await self.unload_extension(c)
+        for cog in self.cog_modules:
+            await self.unload_extension(cog)
 
     async def sync_commands(self) -> None:
         await self.tree.sync()
 
 
-if __name__ == "__main__":
+def main():
     load_dotenv(find_dotenv(".env"))
     client = Bot()
     client.run(os.getenv("DISCORD_TOKEN"))
+
+
+if __name__ == "__main__":
+    main()

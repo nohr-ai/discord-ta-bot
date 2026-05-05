@@ -215,7 +215,7 @@ The bot will:
 
 - Scan roles matching `<year>_group_<n>` for the current UTC year.
 - Assign the `Alumni` role to every member of each group.
-- Archive each group's text channel: renamed to `<year>-group_<n>`, moved to
+- Archive each group's text channel: moved to
   `Archived_text_channels`, restricted to the matching role (read-only).
   Members already hold the role — no channel-access role changes needed.
 - Delete voice channels and the now-empty active categories.

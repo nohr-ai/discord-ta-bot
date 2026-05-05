@@ -5,8 +5,6 @@ from discord import app_commands
 from discord.app_commands.checks import has_permissions
 from discord.ext import commands, tasks
 from canvasapi import Canvas as cv
-from objects.canvas_course import Course
-from dateutil import parser
 from datetime import datetime
 
 

@@ -1,9 +1,8 @@
-import os
+import logging
 import discord
-import asyncio
 from discord import app_commands
 from discord.ext import commands
-from discord.ext.commands import has_permissions
+from discord.app_commands.checks import has_permissions
 
 
 class Template(commands.Cog):
@@ -19,17 +18,15 @@ class Template(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
+        self.logger = logging.getLogger(__name__)
 
     async def echo_autocomplete(
         self, interaction: discord.Interaction, name: str
-    ) -> list[app_commands.Choice[str]]:
+    ) -> app_commands.Choice[str]:
         """
         Autocomplete for the echo command
         """
-        return [
-            app_commands.Choice(name="test", value="test"),
-            app_commands.Choice(name="test2", value="test2"),
-        ]
+        return [app_commands.Choice(name=name, value=name)]
 
     @app_commands.command(
         name="echo",
@@ -41,7 +38,7 @@ class Template(commands.Cog):
         """
         echo
         """
-        interaction.response.send_message(
+        await interaction.response.send_message(
             f"Hello {arg1} from {self.__class__.__name__}"
         )
 
