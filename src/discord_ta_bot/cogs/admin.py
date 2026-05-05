@@ -21,6 +21,7 @@ class Admin(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
+        self.log = logging.getLogger(__name__)
 
     async def get_all_extensions(
         self, interaction: discord.Interaction, module: str
@@ -33,22 +34,6 @@ class Admin(commands.Cog):
             if file.startswith(module) and file.endswith(".py")
         ]
         return extensions
-
-    @app_commands.command(
-        name="load",
-        description="Load a module.",
-    )
-    @app_commands.autocomplete(module=get_all_extensions)
-    @has_permissions(administrator=True)
-    async def load(self, interaction: discord.Interaction, module: str):
-        try:
-            await self.bot.load_extension(f"cogs.{module}")
-        except commands.ExtensionError as e:
-            await interaction.response.send_message(
-                f"Error loading {module}: {e}", ephemeral=True
-            )
-        else:
-            await interaction.response.send_message(f"Loaded {module}.", ephemeral=True)
 
     @app_commands.command(
         name="delete_groups",
@@ -106,7 +91,7 @@ class Admin(commands.Cog):
     @has_permissions(administrator=True)
     async def unload(self, interaction: discord.Interaction, module: str):
         try:
-            await self.bot.unload_extension(f"cogs.{module}")
+            await self.bot.unload_extension(f"discord_ta_bot.cogs.{module}")
         except commands.ExtensionError as e:
             await interaction.response.send_message(
                 f"Error unloading {module}: {e}", ephemeral=True
@@ -115,6 +100,22 @@ class Admin(commands.Cog):
             await interaction.response.send_message(
                 f"Unloaded {module}.", ephemeral=True
             )
+
+    @app_commands.command(
+        name="load",
+        description="Load a module.",
+    )
+    @app_commands.autocomplete(module=get_all_extensions)
+    @has_permissions(administrator=True)
+    async def load(self, interaction: discord.Interaction, module: str):
+        try:
+            await self.bot.load_extension(f"discord_ta_bot.cogs.{module}")
+        except commands.ExtensionError as e:
+            await interaction.response.send_message(
+                f"Error loading {module}: {e}", ephemeral=True
+            )
+        else:
+            await interaction.response.send_message(f"Loaded {module}.", ephemeral=True)
 
     @app_commands.command(
         name="reload_extension",
@@ -140,18 +141,18 @@ class Admin(commands.Cog):
         None
         """
         try:
-            self.bot.log.info(f"Reloading {module}")
-            self.bot.log.debug(
+            self.log.info(f"Reloading {module}")
+            self.log.debug(
                 f"User [{interaction.user.id}] from [{interaction.guild_id}] reloading {module}"
             )
-            await self.bot.reload_extension(f"cogs.{module}")
+            await self.bot.reload_extension(f"discord_ta_bot.cogs.{module}")
         except commands.ExtensionError as e:
-            self.logger.error(f"Error reloading {module}: {e}")
+            self.log.error(f"Error reloading {module}: {e}")
             await interaction.response.send_message(
                 f"Error reloading {module}: {e}", ephemeral=True
             )
         else:
-            self.logger.info(f"Reloaded {module}")
+            self.log.info(f"Reloaded {module}")
             await interaction.response.send_message(
                 f"Reloaded {module}.", ephemeral=True
             )
