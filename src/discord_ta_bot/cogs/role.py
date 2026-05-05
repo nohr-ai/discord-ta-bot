@@ -96,6 +96,7 @@ class Role(commands.Cog):
             existing = discord.utils.get(guild.roles, name=name)
             if existing:
                 msg = f"Role `{name}` already exists — skipped."
+                await existing.edit(hoist=True)
                 self.logger.warning(msg)
                 warnings.append(msg)
                 roles.append(existing)
@@ -103,6 +104,7 @@ class Role(commands.Cog):
                 role = await guild.create_role(name=name, hoist=True)
                 self.logger.info(f"Created role: {role.name}")
                 roles.append(role)
+
         return roles, warnings
 
     async def setup_group_channels(
@@ -292,6 +294,15 @@ class Role(commands.Cog):
         if all_warnings:
             summary += "\n\nWarnings:\n" + "\n".join(f"- {w}" for w in all_warnings)
 
+        alumni = discord.utils.get(guild.roles, name="Alumni")
+        if not alumni:
+            alumni = await guild.create_role(
+                name="Alumni",
+                reason=f"Created by bot at beginning of semester {year}",
+                hoist=True,
+            )
+        # Ensure students taking the course again will be displayed as current students not alumni
+        await alumni.move(above=roles[-1])
         await interaction.followup.send(summary, ephemeral=True)
 
     @app_commands.command(
@@ -335,6 +346,9 @@ class Role(commands.Cog):
         group_roles = [
             role for role in guild.roles if role.name.startswith(year_prefix)
         ]
+        # Do not show group-roles separately after end of semester
+        for role in group_roles:
+            await role.edit(hoist=False)
 
         if not group_roles:
             await interaction.followup.send(
@@ -365,6 +379,7 @@ class Role(commands.Cog):
             )
             self.logger.info("Created Alumni role")
 
+        await alumni_role.move(below=discord.utils.get(guild.roles, name="students"))
         warnings: list[str] = []
 
         for role in group_roles:
