@@ -42,8 +42,7 @@ canonical reference for anyone operating or extending the bot.
 Individual channels inside `group_text_channels` and `group_voice_channels` are
 named after the group role they belong to (e.g. `2026_group_3`).
 
-At end of semester, text channels are renamed to `<year>-group_<n>` (e.g.
-`2026-group_3`) and moved into `Archived_text_channels` with the following
+At end of semester, text channels are moved into `Archived_text_channels` with the following
 permission overwrites:
 
 - `@everyone` — read denied
@@ -93,8 +92,8 @@ Requires **Administrator** permission. The bot must have `manage_roles` and
 2. For each matched role:
    - Assigns the `Alumni` role to every current member of that group
      (creates the role if it does not yet exist).
-   - Looks up the group's text channel **inside `group_text_channels` only**,
-     renames it to `<year>-group_<n>`, moves it to `Archived_text_channels`,
+   - Looks up the group's text channel **inside `group_text_channels` only**
+     moves it to `Archived_text_channels`,
      and sets its overwrites to: deny `@everyone`, allow `<year>_group_<n>`
      (read-only). Logs a warning and continues if the channel is not found.
    - Looks up the group's voice channel **inside `group_voice_channels` only**

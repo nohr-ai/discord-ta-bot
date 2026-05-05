@@ -317,7 +317,7 @@ class Role(commands.Cog):
         - Assigning the ``Alumni`` role to every member of each group
           (created if it does not exist).
         - Archiving each group's text channel (from ``group_text_channels``
-          only): renamed to ``<year>-group_<n>``, moved to
+          only): moved to
           ``Archived_text_channels``, with overwrites: deny ``@everyone``,
           allow ``<year>_group_<n>`` (read-only). Members with
           ``administrator`` permission bypass overwrites automatically.
