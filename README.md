@@ -10,9 +10,9 @@ Out of the box, this template offers/requires:
 
 
 # Setup
-All python dependencies can be found in requirements.txt, alternatively, you can install them from the poetry.lock file.
+All python dependencies can be found in `pyproject.toml` and can be installed from the uv.lock file
 
-`python -m pip install -r requirements.txt` / `poetry install `/ `uv sync`
+`uv sync`
 
 ## Configuration
 The bot requires that you have access to Discord developer portal. For a tutorial, have a look [here](https://discordjs.guide/preparations/setting-up-a-bot-application.html#creating-your-bot).
@@ -37,5 +37,5 @@ Alternatively
 poetry run python discord-ta-bot/Bot.py
 ```
 ```
-uv run discord-ta-bot/Bot.py
+uv run discord-ta-bot
 ```
